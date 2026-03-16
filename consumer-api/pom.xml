@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================
+  pom.xml — Maven Project Object Model for Consumer API
+  ============================================================
+  This is the BUILD FILE for our Spring Boot Consumer API
+  (Order Service). It's structured identically to the Provider
+  API's pom.xml because both are Spring Boot applications.
+
+  KEY DIFFERENCE FROM PROVIDER:
+  This service CALLS the Provider's API (it's a consumer/client).
+  It doesn't serve user data — it CONSUMES user data from the
+  Provider to enrich its own Order responses.
+  ============================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      PARENT POM — Same Spring Boot parent as the Provider.
+      Both services use the same Spring Boot version to ensure
+      compatibility during contract testing.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
+    <!--
+      PROJECT COORDINATES — Identifies this as the Consumer API
+      Note: Same groupId (com.contracttest) as Provider — both
+      are part of the same contract-testing-automation project.
+    -->
+    <groupId>com.contracttest</groupId>
+    <artifactId>consumer-api</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <name>Consumer API (Order Service)</name>
+    <description>
+        Spring Boot REST API Consumer — Order Service.
+        This service manages orders and CALLS the Provider API
+        (User Service) to get user information. It represents
+        the "consumer" side in our contract testing setup.
+    </description>
+
+    <properties>
+        <java.version>17</java.version>
+        <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <springdoc.version>2.5.0</springdoc.version>
+    </properties>
+
+    <!--
+      DEPENDENCY MANAGEMENT — Same Spring Cloud BOM as Provider.
+      This ensures both services use compatible library versions.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+
+        <!--
+          1. spring-boot-starter-web
+             Same as Provider — gives us REST API capabilities.
+             ALSO gives us RestTemplate, which we use to CALL
+             the Provider's API. RestTemplate is Spring's built-in
+             HTTP client for making API calls to other services.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+          2. spring-boot-starter-validation
+             Same as Provider — validates incoming request data.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+          3. springdoc-openapi — API documentation
+             Same as Provider — auto-generates OpenAPI spec.
+             The Consumer's spec is useful for documentation but
+             the KEY spec for contract testing is the Provider's.
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
+        <!--
+          4. spring-boot-starter-test — Testing dependencies
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          5. spring-cloud-contract-stub-runner (TEST SCOPE) — PHASE 2
+             ==========================================================
+             This is the CONSUMER-SIDE contract testing library.
+             It runs a fake version of the Provider (using WireMock)
+             based on the stubs generated from the contract files.
+
+             HOW IT WORKS:
+               1. Provider generates stubs during its build (mvn install)
+               2. Stubs get stored in your local Maven repository
+               3. Consumer's Stub Runner downloads those stubs
+               4. Stub Runner starts a WireMock server with fake responses
+               5. Consumer's tests call the fake server instead of real Provider
+
+             This means you can test the Consumer WITHOUT the Provider running!
+             The fake server responds exactly as the contracts promise.
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-contract-stub-runner</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

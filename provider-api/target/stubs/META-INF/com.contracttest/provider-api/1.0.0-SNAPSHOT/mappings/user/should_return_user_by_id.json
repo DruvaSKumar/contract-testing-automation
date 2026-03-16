@@ -1,0 +1,16 @@
+{
+  "id" : "1727c541-507b-4fc1-8b97-abe7a47a059c",
+  "request" : {
+    "urlPath" : "/api/users/1",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "body" : "{\"id\":1,\"name\":\"Alice Johnson\",\"email\":\"alice@example.com\",\"role\":\"ADMIN\"}",
+    "headers" : {
+      "Content-Type" : "application/json"
+    },
+    "transformers" : [ "response-template", "spring-cloud-contract" ]
+  },
+  "uuid" : "1727c541-507b-4fc1-8b97-abe7a47a059c"
+}

@@ -1,0 +1,16 @@
+{
+  "id" : "8e1773b6-2086-4e0a-b6e5-ca5a8f48313b",
+  "request" : {
+    "urlPath" : "/api/users",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "body" : "[{\"id\":1,\"name\":\"Alice Johnson\",\"email\":\"alice@example.com\",\"role\":\"ADMIN\"},{\"id\":2,\"name\":\"Bob Smith\",\"email\":\"bob@example.com\",\"role\":\"USER\"},{\"id\":3,\"name\":\"Charlie Brown\",\"email\":\"charlie@example.com\",\"role\":\"MANAGER\"}]",
+    "headers" : {
+      "Content-Type" : "application/json"
+    },
+    "transformers" : [ "response-template", "spring-cloud-contract" ]
+  },
+  "uuid" : "8e1773b6-2086-4e0a-b6e5-ca5a8f48313b"
+}

@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================
+  pom.xml — Maven Project Object Model
+  ============================================================
+  This is the BUILD FILE for our Spring Boot Provider API.
+  Maven reads this file to know:
+    - What version of Java to use
+    - What libraries (dependencies) to download
+    - How to compile, test, and package the project
+    - What plugins to run during the build
+
+  WHAT IS MAVEN?
+  Maven is a build automation tool for Java projects.
+  Think of it as "npm for Java" — it manages dependencies,
+  compiles code, runs tests, and packages your app.
+  ============================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <!-- Maven POM model version (always 4.0.0) -->
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      PARENT POM — spring-boot-starter-parent
+      =========================================
+      By declaring Spring Boot as our "parent", we inherit:
+        - Default dependency versions (so we don't have to specify them)
+        - Plugin configurations
+        - Java compiler settings
+      Think of it as: "Use Spring Boot's recommended setup"
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <!-- Empty relativePath means "download from Maven Central" -->
+        <relativePath/>
+    </parent>
+
+    <!--
+      PROJECT COORDINATES — How Maven identifies THIS project
+      =========================================================
+      groupId:    Your organization/company (like a namespace)
+      artifactId: The name of this specific project
+      version:    Current version of the project
+      name:       Human-readable project name
+      description: What this project does
+    -->
+    <groupId>com.contracttest</groupId>
+    <artifactId>provider-api</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <name>Provider API</name>
+    <description>
+        Spring Boot REST API Provider for Contract Testing Automation.
+        This service provides User Management endpoints that will be
+        contract-tested using Spring Cloud Contract.
+    </description>
+
+    <!--
+      PROPERTIES — Variables used throughout this POM
+      =================================================
+      These are like "constants" you can reference with ${property.name}
+    -->
+    <properties>
+        <!-- Java version for compilation. We use 17 for maximum compatibility
+             with Spring Boot 3.x. Your JDK 25 can compile Java 17 code fine. -->
+        <java.version>17</java.version>
+
+        <!-- Spring Cloud BOM (Bill of Materials) version.
+             This manages versions of ALL Spring Cloud libraries so they're
+             compatible with each other. 2023.0.3 works with Spring Boot 3.2.x -->
+        <spring-cloud.version>2023.0.3</spring-cloud.version>
+
+        <!-- springdoc-openapi version for auto-generating API documentation.
+             Version 2.x works with Spring Boot 3.x (Jakarta namespace) -->
+        <springdoc.version>2.5.0</springdoc.version>
+    </properties>
+
+    <!--
+      DEPENDENCY MANAGEMENT — Version control for Spring Cloud
+      ==========================================================
+      This section doesn't ADD dependencies — it just controls VERSIONS.
+      When we add a Spring Cloud dependency below, Maven will automatically
+      use the version defined in this BOM. This prevents version conflicts.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!--
+      DEPENDENCIES — Libraries our project needs
+      =============================================
+      Each <dependency> is a library Maven will download and include.
+      "scope" controls WHEN the dependency is available:
+        - compile (default): Available everywhere
+        - test: Only available in test code
+        - runtime: Available at runtime but not compile time
+    -->
+    <dependencies>
+
+        <!--
+          1. spring-boot-starter-web
+             ========================
+             This is THE core dependency for building REST APIs.
+             It includes:
+               - Spring MVC (for @RestController, @GetMapping, etc.)
+               - Embedded Tomcat server (so you can run the app standalone)
+               - Jackson (for JSON serialization/deserialization)
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+          2. spring-boot-starter-validation
+             ================================
+             Adds Jakarta Bean Validation support.
+             Allows us to use annotations like:
+               - @NotBlank (field must not be empty)
+               - @Email (must be valid email format)
+               - @Size (string length constraints)
+             These validate incoming API request data automatically.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+          3. springdoc-openapi-starter-webmvc-ui
+             =====================================
+             AUTO-GENERATES OpenAPI 3.0 documentation from our code!
+             This is crucial for our project because:
+               - It creates the OpenAPI spec (JSON/YAML) our AI Agent will read
+               - It provides Swagger UI for visual API testing
+             Endpoints it creates:
+               - /v3/api-docs        → OpenAPI spec in JSON
+               - /v3/api-docs.yaml   → OpenAPI spec in YAML
+               - /swagger-ui.html    → Interactive API documentation UI
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
+        <!--
+          4. spring-boot-starter-test (TEST SCOPE)
+             =======================================
+             Includes everything needed for testing:
+               - JUnit 5 (test framework)
+               - Mockito (mocking library)
+               - Spring Test (for testing Spring components)
+               - AssertJ (fluent assertions)
+             "test" scope means this is ONLY available in src/test/
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          5. spring-cloud-contract-verifier (TEST SCOPE) — PHASE 2
+             ==========================================================
+             This is the PROVIDER-SIDE contract testing library.
+             It does two things:
+               a) Reads contract YAML files from src/test/resources/contracts/
+               b) Auto-generates JUnit tests from those contracts
+             The generated tests call your real API endpoints and verify
+             the responses match what the contracts promise.
+
+             Think of it as: "Automatically test that my API keeps its promises."
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-contract-verifier</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          6. spring-cloud-contract-spec (REST Assured MockMvc) — PHASE 2
+             ==============================================================
+             The auto-generated contract tests use REST Assured MockMvc
+             to call your controller endpoints in-memory. This library
+             provides the RestAssuredMockMvc class used in BaseContractTest.
+        -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>spring-mock-mvc</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!--
+      BUILD PLUGINS — Tools that run during the Maven build lifecycle
+      ================================================================
+      Plugins extend Maven's capabilities. They run at specific "phases"
+      of the build (compile, test, package, etc.)
+    -->
+    <build>
+        <plugins>
+            <!--
+              spring-boot-maven-plugin
+              =========================
+              This plugin:
+                - Packages the app as an executable JAR (with embedded Tomcat)
+                - Enables `mvn spring-boot:run` to start the app quickly
+                - Creates a "fat JAR" containing all dependencies
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!--
+              spring-cloud-contract-maven-plugin — PHASE 2
+              ================================================
+              THIS IS THE MAGIC PLUGIN. During `mvn test`, it:
+                1. Reads YAML contract files from src/test/resources/contracts/
+                2. Auto-generates JUnit test classes from them
+                3. Runs those tests against your API
+                4. Generates STUBS (WireMock mappings) that the Consumer
+                   can use to test WITHOUT the real Provider running
+
+              The stubs get installed to your local Maven repository
+              so the Consumer can pull them as a dependency.
+
+              baseClassForTests: The generated tests extend this class.
+              It must set up the Spring context so the API is testable.
+            -->
+            <plugin>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-contract-maven-plugin</artifactId>
+                <version>4.1.3</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <!--
+                      Base class that ALL generated contract tests extend.
+                      This class sets up RestAssuredMockMvc with our controller
+                      so the auto-generated tests can call the API.
+                    -->
+                    <baseClassForTests>
+                        com.contracttest.provider.BaseContractTest
+                    </baseClassForTests>
+                    <!--
+                      Where to find the contract YAML files.
+                      Maven looks here for all .yml/.yaml files.
+                    -->
+                    <contractsDirectory>
+                        ${project.basedir}/src/test/resources/contracts
+                    </contractsDirectory>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>
