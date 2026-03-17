@@ -1,3 +1,0 @@
-user\should_create_a_new_user.yml
-user\should_return_all_users.yml
-user\should_return_user_by_id.yml

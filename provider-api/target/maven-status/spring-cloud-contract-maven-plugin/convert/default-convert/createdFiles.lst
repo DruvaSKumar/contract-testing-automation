@@ -1,6 +1,0 @@
-META-INF\com.contracttest\provider-api\1.0.0-SNAPSHOT\mappings\user\should_return_user_by_id.json
-META-INF\com.contracttest\provider-api\1.0.0-SNAPSHOT\contracts\user\should_create_a_new_user.yml
-META-INF\com.contracttest\provider-api\1.0.0-SNAPSHOT\contracts\user\should_return_user_by_id.yml
-META-INF\com.contracttest\provider-api\1.0.0-SNAPSHOT\contracts\user\should_return_all_users.yml
-META-INF\com.contracttest\provider-api\1.0.0-SNAPSHOT\mappings\user\should_create_a_new_user.json
-META-INF\com.contracttest\provider-api\1.0.0-SNAPSHOT\mappings\user\should_return_all_users.json
