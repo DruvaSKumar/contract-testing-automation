@@ -38,3 +38,4 @@ response:
       - path: $.id
         type: by_regex
         value: "[0-9]+"
+

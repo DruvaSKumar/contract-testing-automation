@@ -16,8 +16,9 @@
 # ============================================================
 
 # [SAY]
-# "In our microservice architecture, services talk to each other
-#  via REST APIs. The problem is: when one team changes their API,
+# "CURRENTLY IN MODERN SYSTEMS, APPLICATION ARE SPLIT INTO MULTIPLE MICROSERVICES,
+   In our microservice architecture, services talk to each other
+#  via REST APIs Over HTTP. The problem is: when one team changes their API,
 #  it can silently break other services that depend on it.
 #
 #  Manual testing catches some issues, but it's slow, inconsistent,
@@ -137,10 +138,11 @@ mvn clean install
 #  - 'Building jar: provider-api-1.0.0-SNAPSHOT-stubs.jar'
 #    — it generated STUBS that the Consumer can use for testing
 #  - The stubs are installed to the local Maven repository
+SO THE PROVIDER SIDE API IS WORKING FINE W.R.T THE CONTRACT 
 #
 #  If ANY contract test fails, the build FAILS. This means we
 #  can't deploy a Provider that breaks its contracts."
-
+if AT ALL THIS TEST Was NOT DONE THEN THIS ISSUE WOULD HAVE BEEN DEPLOYED AND GOT ERROR DURING PRODUCTION
 # [SAY]
 # "Let me show you the auto-generated test."
 
