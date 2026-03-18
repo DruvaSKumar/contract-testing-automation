@@ -1,0 +1,28 @@
+{
+  "id" : "d1942614-5eac-4168-b13c-4cb158c198b1",
+  "request" : {
+    "urlPath" : "/api/users",
+    "method" : "POST",
+    "headers" : {
+      "Content-Type" : {
+        "equalTo" : "application/json"
+      }
+    },
+    "bodyPatterns" : [ {
+      "matchesJsonPath" : "$[?(@.['name'] == 'Dave Wilson')]"
+    }, {
+      "matchesJsonPath" : "$[?(@.['email'] == 'dave@example.com')]"
+    }, {
+      "matchesJsonPath" : "$[?(@.['role'] == 'USER')]"
+    } ]
+  },
+  "response" : {
+    "status" : 201,
+    "body" : "{\"id\":4,\"name\":\"Dave Wilson\",\"email\":\"dave@example.com\",\"role\":\"USER\"}",
+    "headers" : {
+      "Content-Type" : "application/json"
+    },
+    "transformers" : [ "response-template", "spring-cloud-contract" ]
+  },
+  "uuid" : "d1942614-5eac-4168-b13c-4cb158c198b1"
+}
