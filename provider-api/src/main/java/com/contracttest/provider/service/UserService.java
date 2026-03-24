@@ -149,4 +149,22 @@ public class UserService {
         // remove() returns the removed value, or null if key wasn't found
         return userStore.remove(id) != null;
     }
+
+    /**
+     * Reset the data store to its initial state.
+     *
+     * WHY IS THIS NEEDED?
+     * During contract testing, each test modifies shared in-memory data.
+     * For example, a DELETE test removes a user, which would break
+     * subsequent GET tests expecting that user to exist.
+     *
+     * By resetting before each test, we ensure every test starts
+     * with the same 3 sample users — making tests independent and
+     * repeatable regardless of execution order.
+     */
+    public void resetData() {
+        userStore.clear();
+        idCounter.set(1);
+        initSampleData();
+    }
 }

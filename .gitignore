@@ -59,3 +59,6 @@ Thumbs.db                 # Windows thumbnail cache
 Desktop.ini               # Windows folder settings
 *.swp                     # Vim swap files
 *~                        # Backup files
+
+# ----- Project-specific -----
+DEMO_SCRIPT.txt           # Personal demo script (not for repo)

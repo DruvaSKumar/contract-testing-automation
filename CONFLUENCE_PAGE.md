@@ -3,9 +3,9 @@
 **Project Name:** Contract Testing Automation with AI Agents  
 **Author:** Druva S Kumar  
 **Last Updated:** March 2026  
-**Status:** In Progress (Phase 6 of 9 Complete)  
+**Status:** In Progress (Phase 7 of 9 Complete, Phase 8–9 Partially Addressed)  
 **Repository:** [GitHub](#) | [GitLab](#)  
-**Tech Stack:** Java 25, Spring Boot 3.2.5, Spring Cloud Contract 4.1.3, Maven, Python (upcoming)
+**Tech Stack:** Java 25, Spring Boot 3.2.5, Spring Cloud Contract 4.1.3, Maven, Python 3.14
 
 ---
 
@@ -134,8 +134,10 @@ CONTRACT YAML FILES (shared source of truth)
 | HTTP Client | RestTemplate | Managed | Inter-service communication |
 | Build Tool | Apache Maven | 3.9.12 | Build, test, package lifecycle |
 | Language | Java | 25 (target: 17) | Primary development language |
-| AI Agent | Python | 3.x | Contract generation automation (upcoming) |
-| CI/CD | GitLab CI | — | Pipeline automation (upcoming) |
+| AI Agent | Python | 3.14 | Contract generation automation |
+| AI Agent HTTP | requests | 2.32 | Fetching OpenAPI spec from Provider |
+| AI Agent YAML | PyYAML | 6.0 | Contract YAML parsing and generation |
+| CI/CD | GitLab CI | — | Pipeline automation |
 
 ---
 
@@ -151,11 +153,11 @@ CONTRACT YAML FILES (shared source of truth)
 | **4** | Consumer API Development | ✅ Complete | Order Service (CRUD), inter-service HTTP calls |
 | **5** | Contract Testing Implementation | ✅ Complete | 3 contracts, auto-generated tests, WireMock stubs |
 | **6** | Breaking Change Verification | ✅ Complete | Demonstrated contract failure on breaking change |
-| **7** | AI Agent — Contract Generator | 🔜 Planned | Python agent for automated contract generation |
-| **8** | CI/CD Pipeline Integration | 🔜 Planned | GitLab CI with contract verification gates |
-| **9** | Reporting & Maintenance | 🔜 Planned | Dashboards, drift alerts, auto-remediation |
+| **7** | AI Agent — Contract Generator | ✅ Complete | 5 CLI commands, 5 tools, 2 AI-generated contracts |
+| **8** | CI/CD Pipeline Integration | 🔨 In Progress | .gitlab-ci.yml generated, pending live testing |
+| **9** | Reporting & Maintenance | 🔨 Partial | Health reports, drift detection, CI validation built |
 
-### 5.2 Current Completion: 67% (6 of 9 phases)
+### 5.2 Current Completion: 78% (7 of 9 phases complete, 8–9 partially addressed)
 
 ---
 
@@ -295,7 +297,8 @@ When the Consumer serves an order, it calls the Provider's User API to fetch use
 `BaseContractTest.java` — Abstract class annotated with `@SpringBootTest`, initializes `RestAssuredMockMvc.standaloneSetup(userController)` in `@BeforeEach`. All auto-generated contract tests extend this class.
 
 **Build Output:**
-- `mvn clean install` → 4 tests pass (3 contract + 1 smoke)
+- `mvn clean install` → 6 tests pass (5 contract + 1 smoke)
+- Contracts: `should_return_user_by_id`, `should_return_all_users`, `should_create_a_new_user`, `should_update_user_by_id` (AI-generated), `should_delete_user_by_id` (AI-generated)
 - Stubs JAR generated and installed to local Maven repository (`~/.m2/repository`)
 
 #### Consumer Side Configuration
@@ -335,38 +338,85 @@ The SCC Verifier detected that the Provider's actual API response (`name`) did n
 
 ---
 
-## 7. Upcoming Phases
-
-### 7.1 Phase 7 — AI Agent for Contract Generation
+### 6.7 Phase 7 — AI Agent for Contract Generation
 
 **Objective:** Build a Python-based AI agent that automates contract file generation by reading the Provider's OpenAPI specification.
 
-**Planned Capabilities:**
-- Parse OpenAPI 3.0 specification from `/v3/api-docs`
-- Generate SCC-compatible YAML contract files for all documented endpoints
-- Detect API drift between the live spec and existing contracts
-- Recommend contract updates when API changes are detected
-- Generate CI/CD pipeline configuration
+**Implementation:**
 
-### 7.2 Phase 8 — CI/CD Pipeline (GitLab CI)
+The AI Agent lives in `ai-agent/` and consists of 5 tools orchestrated through a single CLI entry point (`main.py`).
+
+| Tool | File | Purpose |
+|------|------|---------|
+| Spec Reader | `spec_reader.py` | Fetches `/v3/api-docs`, resolves `$ref` references, extracts all endpoints with schemas |
+| Contract Generator | `contract_generator.py` | Converts parsed endpoints into SCC-compatible YAML contracts with matchers and sample data |
+| Drift Detector | `drift_detector.py` | Compares existing contracts against live spec; finds uncovered, orphaned, and drifted contracts |
+| Report Generator | `report_generator.py` | Produces formatted reports with coverage bars, health status, and remediation suggestions |
+| CI Config Generator | `ci_config_generator.py` | Scans project structure, generates multi-stage `.gitlab-ci.yml` with caching and gated deploy |
+
+**CLI Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `python main.py generate` | Fetch spec → generate contract YAMLs |
+| `python main.py drift` | Compare contracts vs spec → report mismatches |
+| `python main.py report` | Full health report with coverage and remediation |
+| `python main.py validate` | CI-friendly check → exit code 0 (pass) or 1 (fail) |
+| `python main.py ci` | Generate `.gitlab-ci.yml` pipeline |
+
+**Results:**
+- Generated **2 new contracts** (PUT update, DELETE) auto-verified by SCC
+- **5/5 endpoints covered** — 100% HEALTHY
+- Provider tests: **6/6 pass** (5 contract + 1 smoke)
+- Consumer tests: **2/2 pass** (1 contract + 1 smoke)
+- `.gitlab-ci.yml` generated with 7 jobs across 4 stages
+
+**Test Isolation Fix:**
+During development, the DELETE contract test was removing user 1, breaking subsequent GET tests. This was resolved by adding a `resetData()` method to `UserService` and calling it in `BaseContractTest.@BeforeEach`, ensuring each test starts with fresh sample data.
+
+---
+
+### 6.8 Phase 8 — CI/CD Pipeline (GitLab CI) — In Progress
 
 **Objective:** Integrate contract testing into an automated CI/CD pipeline.
 
-**Planned Pipeline Stages:**
-1. **Build** — Compile Provider and Consumer
-2. **Contract Verify** — Execute contract tests on both sides
-3. **Report** — Generate contract compliance reports
-4. **Deploy Gate** — Block deployment on contract failures
+**Current Status:** The `.gitlab-ci.yml` pipeline has been generated by the AI Agent's `ci` command. Push to GitLab is pending (blocked by project permissions).
 
-### 7.3 Phase 9 — Reporting & Maintenance
+**Pipeline Structure:**
+
+| Stage | Jobs | Purpose |
+|-------|------|---------|
+| **build** | `provider-build`, `consumer-build` | Compile and package both APIs |
+| **test** | `provider-contract-test`, `consumer-contract-test`, `ai-agent-drift-check` | Run SCC verification, stub tests, drift detection |
+| **report** | `contract-report` | Collect and summarize all test results |
+| **deploy** | `deploy` | Gated by test success; auto-deploys from main only |
+
+**Key Features:**
+- Maven dependency caching between pipeline runs
+- Provider stubs JAR passed as artifact to Consumer test job
+- JUnit test reports integrated with GitLab merge request UI
+- Deployment blocked if any contract test fails
+
+**Remaining:**
+- Push code to GitLab (needs Maintainer role on the project)
+- Run and verify the pipeline end-to-end
+- Demonstrate a failing contract blocking deployment
+
+---
+
+### 6.9 Phase 9 — Reporting & Maintenance — Partially Addressed
 
 **Objective:** Implement operational tooling for ongoing contract health monitoring.
 
-**Planned Features:**
-- Contract violation dashboards
-- AI-powered remediation suggestions
-- Automated contract update merge requests
-- Team notification integrations
+**Already Built (via AI Agent):**
+- ✅ Contract health reports with coverage % and status
+- ✅ Drift detection with specific remediation suggestions
+- ✅ CI-friendly validation with exit codes
+
+**Remaining:**
+- Dashboard UI for visualizing contract health over time
+- Automated merge request creation for contract updates
+- Team notification integration (Slack/email on contract failure)
 
 ---
 
@@ -402,12 +452,22 @@ mvn spring-boot:run
 # Step 1: Build Provider + generate stubs
 cd provider-api
 mvn clean install
-# Expected: 4 tests pass, stubs JAR generated
+# Expected: 6 tests pass, stubs JAR generated
 
 # Step 2: Test Consumer against stubs
 cd ../consumer-api
 mvn clean test
 # Expected: 2 tests pass, WireMock stubs served
+
+# Step 3: Run AI Agent (optional)
+cd ../ai-agent
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python main.py generate   # Generate contracts from spec
+python main.py drift      # Check for drift
+python main.py report     # Health report
+python main.py ci         # Generate CI pipeline
 ```
 
 ### 8.4 API Documentation
@@ -455,6 +515,18 @@ contract-testing-automation/
 │           └── java/.../UserServiceClientContractTest  # Consumer contract test
 │
 └── ai-agent/                              # Python AI Agent (Phase 7)
+    ├── main.py                            # CLI: generate/drift/report/validate/ci
+    ├── requirements.txt                   # Python dependencies
+    ├── README.md                          # AI Agent documentation
+    ├── agent/
+    │   ├── __init__.py
+    │   ├── spec_reader.py                 # OpenAPI spec parser
+    │   ├── contract_generator.py          # SCC YAML generator
+    │   ├── drift_detector.py              # Contract drift detection
+    │   ├── report_generator.py            # Health reports & remediation
+    │   └── ci_config_generator.py         # GitLab CI pipeline generator
+    └── tests/
+        └── __init__.py
 ```
 
 ---

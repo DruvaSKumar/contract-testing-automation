@@ -40,6 +40,10 @@ import org.springframework.boot.test.context.SpringBootTest;
  * @SpringBootTest loads the FULL application context.
  * This means UserService gets its @PostConstruct sample data,
  * and all beans are wired — just like the real running app.
+ *
+ * IMPORTANT: Data is RESET before each test so that tests are
+ * independent. Without this, a DELETE test could remove a user
+ * and break subsequent GET tests that expect that user to exist.
  */
 @SpringBootTest
 public abstract class BaseContractTest {
@@ -47,17 +51,22 @@ public abstract class BaseContractTest {
     @Autowired
     private UserController userController;
 
+    @Autowired
+    private UserService userService;
+
     /**
      * @BeforeEach runs before EACH auto-generated test method.
-     * It configures RestAssuredMockMvc to use our UserController.
      *
-     * RestAssuredMockMvc.standaloneSetup(controller):
-     *   - Creates an in-memory MockMvc instance
-     *   - Routes HTTP-like requests to the controller
-     *   - No real HTTP server needed — tests run in milliseconds
+     * Two things happen here:
+     * 1. Reset the in-memory data store to its initial state (3 users)
+     *    This ensures every test starts with clean, predictable data
+     *    regardless of execution order.
+     * 2. Configure RestAssuredMockMvc to use our UserController.
+     *    This creates an in-memory MockMvc instance — no real HTTP needed.
      */
     @BeforeEach
     public void setup() {
+        userService.resetData();
         RestAssuredMockMvc.standaloneSetup(userController);
     }
 }
