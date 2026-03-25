@@ -1,0 +1,8 @@
+# ============================================================
+# AI Agent Dependencies — Contract Testing Automation
+# ============================================================
+# Install with: pip install -r requirements.txt
+# ============================================================
+
+requests>=2.31.0          # HTTP client — fetches OpenAPI spec from Provider
+pyyaml>=6.0.1             # YAML parser — reads/writes SCC contract files
