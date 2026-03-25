@@ -1,0 +1,38 @@
+# ============================================================
+# Contract 2: should_return_all_users.yml
+# ============================================================
+# This contract says:
+#   "When someone sends GET /api/users,
+#    the Provider MUST respond with status 200
+#    and a JSON array of user objects."
+#
+# The Consumer (Order Service) uses this endpoint to validate
+# that users exist before processing orders in batch.
+# ============================================================
+
+description: "Should return a list of all users"
+name: "should_return_all_users"
+
+request:
+  method: GET
+  url: /api/users
+
+response:
+  status: 200
+  headers:
+    Content-Type: application/json
+  body:
+    # Response is a JSON array with at least one user object.
+    # Each user object must have id, name, email, and role.
+    - id: 1
+      name: "Alice Johnson"
+      email: "alice@example.com"
+      role: "ADMIN"
+    - id: 2
+      name: "Bob Smith"
+      email: "bob@example.com"
+      role: "USER"
+    - id: 3
+      name: "Charlie Brown"
+      email: "charlie@example.com"
+      role: "MANAGER"
