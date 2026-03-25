@@ -264,11 +264,8 @@ deploy:
   stage: deploy
   script:
     - echo "All contract tests passed — safe to deploy!"
-    - echo "TODO: Add your deployment commands here"
-    # Examples:
-    #   - docker build -t provider-api:$CI_COMMIT_SHA provider-api/
-    #   - docker push registry.example.com/provider-api:$CI_COMMIT_SHA
-    #   - kubectl set image deployment/provider provider=registry.example.com/provider-api:$CI_COMMIT_SHA
+    - echo "TODO — Add your deployment commands here"
+    - echo "Examples — docker build, docker push, kubectl apply, etc."
   rules:
     # Only deploy from the main branch
     - if: $CI_COMMIT_BRANCH == "main"
