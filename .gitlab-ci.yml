@@ -263,9 +263,8 @@ contract-report:
 deploy:
   stage: deploy
   script:
-    - echo "All contract tests passed — safe to deploy!"
-    - echo "TODO — Add your deployment commands here"
-    - echo "Examples — docker build, docker push, kubectl apply, etc."
+    - echo "All contract tests passed - safe to deploy!"
+    - echo "Deployment placeholder - replace with your deploy commands (docker build, kubectl apply, etc.)"
   rules:
     # Only deploy from the main branch
     - if: $CI_COMMIT_BRANCH == "main"
