@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contract Health Dashboard</title>
+    <style>
+        /* ---- Reset & Base ---- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #f0f2f5;
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+
+        /* ---- Header ---- */
+        .header {
+            background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+            color: #fff;
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 1.6rem; font-weight: 600; }
+        .header .subtitle { color: #a0becf; font-size: 0.9rem; margin-top: 0.2rem; }
+        .header .timestamp {
+            background: rgba(255,255,255,0.15);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+        .header .refresh-btn {
+            background: rgba(255,255,255,0.2);
+            color: #fff; border: 1px solid rgba(255,255,255,0.3);
+            padding: 0.5rem 1.2rem; border-radius: 8px;
+            cursor: pointer; font-size: 0.85rem;
+            transition: background 0.2s;
+            text-decoration: none;
+        }
+        .header .refresh-btn:hover { background: rgba(255,255,255,0.35); }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+
+        /* ---- Error Banner ---- */
+        .error-banner {
+            background: #fdecea;
+            border: 1px solid #e74c3c;
+            color: #c0392b;
+            padding: 1.2rem 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+            font-size: 0.95rem;
+        }
+        .error-banner strong { display: block; font-size: 1.05rem; margin-bottom: 0.3rem; }
+
+        /* ---- Metric Cards Row ---- */
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .metric-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border-top: 4px solid #ddd;
+            transition: transform 0.15s;
+        }
+        .metric-card:hover { transform: translateY(-2px); }
+        .metric-card .value { font-size: 2rem; font-weight: 700; margin: 0.3rem 0; }
+        .metric-card .label { font-size: 0.8rem; color: #7f8c8d; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-card .detail { font-size: 0.75rem; color: #95a5a6; margin-top: 0.3rem; }
+
+        .metric-card.health { border-top-color: #1e3a5f; }
+        .metric-card.coverage { border-top-color: #2ecc71; }
+        .metric-card.covered { border-top-color: #27ae60; }
+        .metric-card.uncovered { border-top-color: #e74c3c; }
+        .metric-card.orphaned { border-top-color: #f39c12; }
+        .metric-card.drifted { border-top-color: #9b59b6; }
+        .metric-card.endpoints { border-top-color: #3498db; }
+        .metric-card.contracts { border-top-color: #1abc9c; }
+
+        /* ---- Health Badge ---- */
+        .health-badge {
+            display: inline-block;
+            padding: 0.3rem 1rem;
+            border-radius: 20px;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        .health-HEALTHY { background: #d4edda; color: #155724; }
+        .health-WARNING { background: #fff3cd; color: #856404; }
+        .health-CRITICAL { background: #f8d7da; color: #721c24; }
+
+        /* ---- Coverage Bar ---- */
+        .coverage-bar-container {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 18px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+        .coverage-bar {
+            height: 100%;
+            border-radius: 10px;
+            background: linear-gradient(90deg, #27ae60, #2ecc71);
+            transition: width 0.5s ease;
+        }
+        .coverage-bar.warning { background: linear-gradient(90deg, #f39c12, #f1c40f); }
+        .coverage-bar.critical { background: linear-gradient(90deg, #e74c3c, #c0392b); }
+
+        /* ---- Section Panels ---- */
+        .section {
+            background: #fff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .section h2 {
+            font-size: 1.15rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #f0f2f5;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .section h2 .badge {
+            background: #e9ecef;
+            padding: 0.15rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* ---- Endpoint Table ---- */
+        .endpoint-table { width: 100%; border-collapse: collapse; }
+        .endpoint-table th {
+            background: #f8f9fa;
+            text-align: left;
+            padding: 0.7rem 1rem;
+            font-size: 0.8rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .endpoint-table td {
+            padding: 0.7rem 1rem;
+            border-bottom: 1px solid #f0f2f5;
+            font-size: 0.9rem;
+        }
+        .endpoint-table tr:hover td { background: #f8f9fa; }
+        .endpoint-table tr:last-child td { border-bottom: none; }
+
+        /* ---- Method Badges ---- */
+        .method {
+            display: inline-block;
+            padding: 0.15rem 0.6rem;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            font-family: 'Consolas', 'Courier New', monospace;
+            min-width: 55px;
+            text-align: center;
+        }
+        .method-GET { background: #dbeafe; color: #1e40af; }
+        .method-POST { background: #d4edda; color: #155724; }
+        .method-PUT { background: #fff3cd; color: #856404; }
+        .method-DELETE { background: #f8d7da; color: #721c24; }
+        .method-PATCH { background: #e8daef; color: #6c3483; }
+
+        /* ---- Status Pills ---- */
+        .status {
+            display: inline-block;
+            padding: 0.2rem 0.7rem;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+        .status-covered { background: #d4edda; color: #155724; }
+        .status-uncovered { background: #f8d7da; color: #721c24; }
+        .status-orphaned { background: #fff3cd; color: #856404; }
+        .status-drifted { background: #e8daef; color: #6c3483; }
+
+        .path { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.85rem; }
+        .summary-text { color: #7f8c8d; font-size: 0.82rem; }
+        .issue-text { color: #e74c3c; font-size: 0.82rem; font-style: italic; }
+        .remediation { color: #6c757d; font-size: 0.82rem; padding: 0.3rem 0 0 1rem; }
+        .file-name { color: #95a5a6; font-size: 0.78rem; font-family: monospace; }
+
+        /* ---- History Chart ---- */
+        .history-grid { display: flex; gap: 6px; align-items: end; height: 120px; padding: 0.5rem 0; }
+        .history-bar {
+            flex: 1;
+            min-width: 20px;
+            max-width: 40px;
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .history-bar:hover { opacity: 0.8; }
+        .history-bar .tooltip {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2c3e50;
+            color: #fff;
+            padding: 0.4rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            white-space: nowrap;
+            z-index: 10;
+        }
+        .history-bar:hover .tooltip { display: block; }
+        .bar-HEALTHY { background: linear-gradient(to top, #27ae60, #2ecc71); }
+        .bar-WARNING { background: linear-gradient(to top, #f39c12, #f1c40f); }
+        .bar-CRITICAL { background: linear-gradient(to top, #e74c3c, #c0392b); }
+        .history-labels { display: flex; gap: 6px; }
+        .history-labels span {
+            flex: 1; min-width: 20px; max-width: 40px;
+            text-align: center; font-size: 0.55rem; color: #95a5a6;
+        }
+        .no-history { color: #95a5a6; font-style: italic; padding: 2rem; text-align: center; }
+
+        /* ---- Two Column Layout ---- */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+        /* ---- Footer ---- */
+        .footer {
+            text-align: center;
+            padding: 1.5rem;
+            color: #95a5a6;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <div>
+        <h1>Contract Health Dashboard</h1>
+        <div class="subtitle">Contract Testing Automation &mdash; Real-time API contract health monitoring</div>
+    </div>
+    <div style="display:flex; gap:1rem; align-items:center;">
+        <div class="timestamp">{{ result.timestamp }}</div>
+        <a href="/" class="refresh-btn">Refresh</a>
+    </div>
+</div>
+
+<div class="container">
+
+{% if result.error %}
+<!-- Error State -->
+<div class="error-banner">
+    <strong>Unable to Fetch Health Data</strong>
+    {{ result.error }}
+    <br><br>Make sure the Provider API is running: <code>cd provider-api && mvn spring-boot:run</code>
+</div>
+{% endif %}
+
+{% if result.drift %}
+{% set s = result.drift.summary %}
+
+<!-- Metric Cards -->
+<div class="metrics">
+    <div class="metric-card health">
+        <div class="label">Health Status</div>
+        <div class="value"><span class="health-badge health-{{ s.health }}">{{ s.health }}</span></div>
+        <div class="detail">Based on coverage &amp; drift analysis</div>
+    </div>
+    <div class="metric-card coverage">
+        <div class="label">Coverage</div>
+        <div class="value" style="color:#2ecc71;">{{ "%.0f"|format(s.coverage_percent) }}%</div>
+        <div class="coverage-bar-container">
+            <div class="coverage-bar {% if s.coverage_percent < 50 %}critical{% elif s.coverage_percent < 80 %}warning{% endif %}"
+                 style="width:{{ s.coverage_percent }}%"></div>
+        </div>
+    </div>
+    <div class="metric-card covered">
+        <div class="label">Covered</div>
+        <div class="value" style="color:#27ae60;">{{ s.covered_count }}</div>
+        <div class="detail">Endpoints with valid contracts</div>
+    </div>
+    <div class="metric-card uncovered">
+        <div class="label">Uncovered</div>
+        <div class="value" style="color:#e74c3c;">{{ s.uncovered_count }}</div>
+        <div class="detail">Endpoints missing contracts</div>
+    </div>
+    <div class="metric-card orphaned">
+        <div class="label">Orphaned</div>
+        <div class="value" style="color:#f39c12;">{{ s.orphaned_count }}</div>
+        <div class="detail">Contracts with no matching endpoint</div>
+    </div>
+    <div class="metric-card drifted">
+        <div class="label">Schema Drift</div>
+        <div class="value" style="color:#9b59b6;">{{ s.drifted_count }}</div>
+        <div class="detail">Contracts with field mismatches</div>
+    </div>
+    <div class="metric-card endpoints">
+        <div class="label">API Endpoints</div>
+        <div class="value" style="color:#3498db;">{{ s.total_spec_endpoints }}</div>
+        <div class="detail">Total in OpenAPI specification</div>
+    </div>
+    <div class="metric-card contracts">
+        <div class="label">Contract Files</div>
+        <div class="value" style="color:#1abc9c;">{{ s.total_contracts }}</div>
+        <div class="detail">YAML files in contracts directory</div>
+    </div>
+</div>
+
+<!-- Covered Endpoints -->
+{% if result.drift.covered %}
+<div class="section">
+    <h2>Covered Endpoints <span class="badge" style="background:#d4edda;color:#155724;">{{ result.drift.covered|length }}</span></h2>
+    <table class="endpoint-table">
+        <thead>
+            <tr>
+                <th>Method</th>
+                <th>Endpoint Path</th>
+                <th>Contract File</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for ep in result.drift.covered %}
+            <tr>
+                <td><span class="method method-{{ ep.method }}">{{ ep.method }}</span></td>
+                <td class="path">{{ ep.url }}</td>
+                <td class="file-name">{{ ep.file }}</td>
+                <td><span class="status status-covered">Covered</span></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="two-col">
+
+    <!-- Uncovered Endpoints -->
+    <div class="section">
+        <h2>Uncovered Endpoints <span class="badge" style="background:#f8d7da;color:#721c24;">{{ result.drift.uncovered|length }}</span></h2>
+        {% if result.drift.uncovered %}
+        <table class="endpoint-table">
+            <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+            <tbody>
+            {% for ep in result.drift.uncovered %}
+                <tr>
+                    <td><span class="method method-{{ ep.method }}">{{ ep.method }}</span></td>
+                    <td class="path">{{ ep.path }}</td>
+                    <td>
+                        <span class="summary-text">{{ ep.summary or ep.reason }}</span>
+                        <div class="remediation">Run <code>python main.py generate</code> to create a contract</div>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color:#95a5a6; text-align:center; padding:1.5rem;">All endpoints have contracts. No action needed.</p>
+        {% endif %}
+    </div>
+
+    <!-- Orphaned & Drifted -->
+    <div>
+        <!-- Orphaned -->
+        <div class="section" style="margin-bottom:1.5rem;">
+            <h2>Orphaned Contracts <span class="badge" style="background:#fff3cd;color:#856404;">{{ result.drift.orphaned|length }}</span></h2>
+            {% if result.drift.orphaned %}
+            <table class="endpoint-table">
+                <thead><tr><th>Method</th><th>URL</th><th>File</th></tr></thead>
+                <tbody>
+                {% for ep in result.drift.orphaned %}
+                    <tr>
+                        <td><span class="method method-{{ ep.method }}">{{ ep.method }}</span></td>
+                        <td class="path">{{ ep.url }}</td>
+                        <td>
+                            <span class="file-name">{{ ep.file }}</span>
+                            <div class="remediation">This contract has no matching endpoint. Delete or update it.</div>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color:#95a5a6; text-align:center; padding:1rem;">No orphaned contracts. All contracts map to live endpoints.</p>
+            {% endif %}
+        </div>
+
+        <!-- Drifted -->
+        <div class="section">
+            <h2>Schema Drift <span class="badge" style="background:#e8daef;color:#6c3483;">{{ result.drift.drifted|length }}</span></h2>
+            {% if result.drift.drifted %}
+            <table class="endpoint-table">
+                <thead><tr><th>Method</th><th>URL</th><th>Issues</th></tr></thead>
+                <tbody>
+                {% for ep in result.drift.drifted %}
+                    <tr>
+                        <td><span class="method method-{{ ep.method }}">{{ ep.method }}</span></td>
+                        <td class="path">{{ ep.url }}</td>
+                        <td>
+                            {% for issue in ep.issues %}
+                                <div class="issue-text">{{ issue }}</div>
+                            {% endfor %}
+                            <div class="remediation">Run <code>python main.py generate --overwrite</code> to regenerate</div>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color:#95a5a6; text-align:center; padding:1rem;">No schema drift detected. All contracts match the live API.</p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Health History -->
+<div class="section">
+    <h2>Health Check History <span class="badge">Last {{ history|length }} checks</span></h2>
+    {% if history|length > 1 %}
+    <div class="history-grid">
+        {% for h in history %}
+        <div class="history-bar bar-{{ h.health }}"
+             style="height: {{ h.coverage_percent }}%;">
+            <div class="tooltip">
+                {{ h.timestamp }}<br>
+                {{ h.health }} &mdash; {{ "%.0f"|format(h.coverage_percent) }}% coverage<br>
+                {{ h.covered }}/{{ h.total_endpoints }} endpoints covered
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="history-labels">
+        {% for h in history %}
+        <span>{{ h.timestamp[5:10] }}</span>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="no-history">
+        Health history will appear here after multiple checks. Refresh the page to record another data point.
+    </div>
+    {% endif %}
+</div>
+
+{% endif %}
+
+</div>
+
+<div class="footer">
+    Contract Testing Automation with AI Agents &mdash; Phase 9: Contract Health Dashboard
+    <br>Provider: {{ "http://localhost:8080" }} &middot; Dashboard: {{ "http://localhost:5050" }}
+</div>
+
+</body>
+</html>

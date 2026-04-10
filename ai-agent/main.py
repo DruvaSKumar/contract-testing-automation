@@ -289,6 +289,34 @@ def cmd_ci(args):
     return content
 
 
+def cmd_dashboard(args):
+    """
+    DASHBOARD command — Starts the Contract Health Dashboard web UI.
+
+    Launches a Flask web server that shows:
+    - Overall health status (HEALTHY / WARNING / CRITICAL)
+    - Contract coverage percentage
+    - Per-endpoint coverage breakdown
+    - Drift detection results
+    - Health check history over time
+
+    The dashboard fetches live data from the running Provider API.
+    """
+    from dashboard import app
+
+    port = args.port
+    print("\n" + "=" * 65)
+    print("  AI AGENT: Contract Health Dashboard")
+    print("=" * 65)
+    print(f"\n  Starting dashboard on http://localhost:{port}")
+    print(f"  Provider URL: {args.provider_url}")
+    print(f"\n  Open your browser to http://localhost:{port}")
+    print(f"  Press Ctrl+C to stop\n")
+
+    os.environ["PROVIDER_URL"] = args.provider_url
+    app.run(host="0.0.0.0", port=port, debug=args.debug)
+
+
 def main():
     """
     Main entry point — parses CLI arguments and dispatches to the
@@ -388,6 +416,23 @@ def main():
         help="Output path for .gitlab-ci.yml (default: project_root/.gitlab-ci.yml)",
     )
 
+    # --- dashboard ---
+    dashboard_parser = subparsers.add_parser(
+        "dashboard",
+        help="Start the Contract Health Dashboard web UI",
+    )
+    dashboard_parser.add_argument(
+        "--port",
+        type=int,
+        default=5050,
+        help="Port to run the dashboard on (default: 5050)",
+    )
+    dashboard_parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Run Flask in debug mode with auto-reload",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -401,6 +446,7 @@ def main():
         "report": cmd_report,
         "validate": cmd_validate,
         "ci": cmd_ci,
+        "dashboard": cmd_dashboard,
     }
 
     handler = commands.get(args.command)
