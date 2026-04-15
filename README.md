@@ -1093,7 +1093,7 @@ Notice how the DELETE contract is minimal — no request body, no response body,
    - Maven dependency caching (`.m2/repository`) — speeds up repeated builds
    - Artifact passing — Provider's stubs JAR is passed to the Consumer test job
    - JUnit test report integration — test results appear in GitLab merge request UI
-   - Docker image: `maven:3.9-eclipse-temurin-17` (Java 17 for Spring Boot)
+   - Docker image: `maven:3.9-eclipse-temurin-22` (Java 22 for Spring Cloud Contract 4.1.3)
 
 ### AI Agent Project Structure
 
