@@ -358,9 +358,10 @@ class CIConfigGenerator:
             f"    # Tests are skipped because they already passed in provider-contract-test\n"
             f"    - cd {pd}\n"
             f"    - mvn $MAVEN_CLI_OPTS clean install -DskipTests\n"
-            f"    # Symlink default Maven repo to project-local repo so the stub runner\n"
-            f"    # (which runs in a forked JVM without MAVEN_OPTS) can find the stubs\n"
-            f"    - mkdir -p /root/.m2 && ln -sfn $CI_PROJECT_DIR/.m2/repository /root/.m2/repository\n"
+            f"    # Create settings.xml so the forked surefire JVM's stub runner knows\n"
+            f"    # where the local Maven repo is (MAVEN_OPTS is NOT inherited by forked JVMs)\n"
+            f'    - mkdir -p /root/.m2 && echo "<settings><localRepository>${{CI_PROJECT_DIR}}/.m2/repository</localRepository></settings>" > /root/.m2/settings.xml\n'
+            f"    - rm -rf /root/.m2/repository && ln -s $CI_PROJECT_DIR/.m2/repository /root/.m2/repository\n"
             f"    # Run Consumer contract tests against Provider stubs\n"
             f"    - cd ../{cd}\n"
             f"    - mvn $MAVEN_CLI_OPTS clean test\n"
