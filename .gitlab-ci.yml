@@ -212,7 +212,7 @@ ai-agent-drift-check:
     # Run drift detection
     - cd $CI_PROJECT_DIR/ai-agent
     - . .venv/bin/activate
-    - python3 main.py drift --save-report
+    - python3 main.py --save-report drift
     # Cleanup — stop the Provider
     - kill $PROVIDER_PID 2>/dev/null || true
   artifacts:
