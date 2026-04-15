@@ -428,7 +428,7 @@ class CIConfigGenerator:
             f"    # Run drift detection\n"
             f"    - cd $CI_PROJECT_DIR/{ad}\n"
             f"    - . .venv/bin/activate\n"
-            f"    - python3 main.py drift --save-report\n"
+            f"    - python3 main.py --save-report drift\n"
             f"    # Cleanup — stop the Provider\n"
             f"    - kill $PROVIDER_PID 2>/dev/null || true\n"
             f"  artifacts:\n"
