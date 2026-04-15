@@ -147,6 +147,9 @@ consumer-contract-test:
     # Tests are skipped because they already passed in provider-contract-test
     - cd provider-api
     - mvn $MAVEN_CLI_OPTS clean install -DskipTests
+    # Symlink default Maven repo to project-local repo so the stub runner
+    # (which runs in a forked JVM without MAVEN_OPTS) can find the stubs
+    - mkdir -p /root/.m2 && ln -sfn $CI_PROJECT_DIR/.m2/repository /root/.m2/repository
     # Run Consumer contract tests against Provider stubs
     - cd ../consumer-api
     - mvn $MAVEN_CLI_OPTS clean test
