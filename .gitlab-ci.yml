@@ -36,6 +36,7 @@ stages:
   - build       # Compile source code
   - test        # Run contract verification tests
   - report      # Generate test & coverage reports
+  - fix         # Auto-fix drifted contracts (manual trigger)
   - deploy      # Deploy (only if all tests pass)
 
 
@@ -250,6 +251,66 @@ contract-report:
     - provider-contract-test
     - consumer-contract-test
     - ai-agent-drift-check
+
+
+# ============================================================
+# JOB: AI Agent — Auto-Fix Drifted Contracts
+# ============================================================
+# MANUAL TRIGGER — Click "Play" in the GitLab UI to run.
+#
+# When drift is detected, this job:
+#   1. Starts the Provider API for live spec access
+#   2. Runs the AI Agent's fix command
+#   3. Creates a GitLab Merge Request with the fixed contracts
+#
+# Prerequisites (CI/CD Variables in GitLab):
+#   GITLAB_TOKEN      — Personal Access Token (api scope)
+#   GITLAB_PROJECT_ID — Numeric project ID
+#
+# The MR is created automatically and linked in the job output.
+# A human reviews and merges — keeping the process safe.
+# ============================================================
+auto-fix-contracts:
+  stage: fix
+  image: maven:3.9-eclipse-temurin-22
+  needs:
+    - job: ai-agent-drift-check
+      artifacts: true
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv > /dev/null 2>&1
+    - cd ai-agent
+    - python3 -m venv .venv
+    - . .venv/bin/activate
+    - pip install -q -r requirements.txt
+  script:
+    # Start Provider API in background
+    - cd $CI_PROJECT_DIR/provider-api
+    - mvn $MAVEN_CLI_OPTS spring-boot:run &
+    - PROVIDER_PID=$!
+    # Wait for Provider to be ready
+    - |
+      for i in $(seq 1 30); do
+        if curl -s http://localhost:8080/v3/api-docs > /dev/null 2>&1; then
+          echo "Provider is ready!"
+          break
+        fi
+        echo "Waiting for Provider... ($i/30)"
+        sleep 2
+      done
+    # Run auto-fix with MR creation
+    - cd $CI_PROJECT_DIR/ai-agent
+    - . .venv/bin/activate
+    - python3 main.py --save-report fix --create-mr
+    # Cleanup
+    - kill $PROVIDER_PID 2>/dev/null || true
+  artifacts:
+    when: always
+    paths:
+      - ai-agent/reports/
+    expire_in: 7 days
+  rules:
+    - when: manual
+      allow_failure: true
 
 
 # ============================================================

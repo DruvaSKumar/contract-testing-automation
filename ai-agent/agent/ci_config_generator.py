@@ -176,6 +176,10 @@ class CIConfigGenerator:
         # Report job
         sections.append(self._report_job(structure))
 
+        # Auto-fix job (manual trigger)
+        if structure["has_ai_agent"]:
+            sections.append(self._auto_fix_job(structure))
+
         # Deploy job (gated)
         sections.append(self._deploy_job(structure))
 
@@ -227,6 +231,7 @@ class CIConfigGenerator:
             "  - build       # Compile source code\n"
             "  - test        # Run contract verification tests\n"
             "  - report      # Generate test & coverage reports\n"
+            "  - fix         # Auto-fix drifted contracts (manual trigger)\n"
             "  - deploy      # Deploy (only if all tests pass)\n"
         )
 
@@ -437,6 +442,71 @@ class CIConfigGenerator:
             f"      - {ad}/reports/\n"
             f"    expire_in: 7 days\n"
             f"  allow_failure: true  # Drift warnings don't block, critical drift does (exit code 2)\n"
+        )
+
+    def _auto_fix_job(self, structure):
+        pd = structure["provider_dir"]
+        ad = structure["ai_agent_dir"]
+        return (
+            f"\n"
+            f"# ============================================================\n"
+            f"# JOB: AI Agent — Auto-Fix Drifted Contracts\n"
+            f"# ============================================================\n"
+            f"# MANUAL TRIGGER — Click \"Play\" in the GitLab UI to run.\n"
+            f"#\n"
+            f"# When drift is detected, this job:\n"
+            f"#   1. Starts the Provider API for live spec access\n"
+            f"#   2. Runs the AI Agent's fix command\n"
+            f"#   3. Creates a GitLab Merge Request with the fixed contracts\n"
+            f"#\n"
+            f"# Prerequisites (CI/CD Variables in GitLab):\n"
+            f"#   GITLAB_TOKEN      — Personal Access Token (api scope)\n"
+            f"#   GITLAB_PROJECT_ID — Numeric project ID\n"
+            f"#\n"
+            f"# The MR is created automatically and linked in the job output.\n"
+            f"# A human reviews and merges — keeping the process safe.\n"
+            f"# ============================================================\n"
+            f"auto-fix-contracts:\n"
+            f"  stage: fix\n"
+            f"  image: maven:3.9-eclipse-temurin-22\n"
+            f"  needs:\n"
+            f"    - job: ai-agent-drift-check\n"
+            f"      artifacts: true\n"
+            f"  before_script:\n"
+            f"    - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv > /dev/null 2>&1\n"
+            f"    - cd {ad}\n"
+            f"    - python3 -m venv .venv\n"
+            f"    - . .venv/bin/activate\n"
+            f"    - pip install -q -r requirements.txt\n"
+            f"  script:\n"
+            f"    # Start Provider API in background\n"
+            f"    - cd $CI_PROJECT_DIR/{pd}\n"
+            f"    - mvn $MAVEN_CLI_OPTS spring-boot:run &\n"
+            f"    - PROVIDER_PID=$!\n"
+            f"    # Wait for Provider to be ready\n"
+            f"    - |\n"
+            f"      for i in $(seq 1 30); do\n"
+            f"        if curl -s http://localhost:8080/v3/api-docs > /dev/null 2>&1; then\n"
+            f"          echo \"Provider is ready!\"\n"
+            f"          break\n"
+            f"        fi\n"
+            f"        echo \"Waiting for Provider... ($i/30)\"\n"
+            f"        sleep 2\n"
+            f"      done\n"
+            f"    # Run auto-fix with MR creation\n"
+            f"    - cd $CI_PROJECT_DIR/{ad}\n"
+            f"    - . .venv/bin/activate\n"
+            f"    - python3 main.py --save-report fix --create-mr\n"
+            f"    # Cleanup\n"
+            f"    - kill $PROVIDER_PID 2>/dev/null || true\n"
+            f"  artifacts:\n"
+            f"    when: always\n"
+            f"    paths:\n"
+            f"      - {ad}/reports/\n"
+            f"    expire_in: 7 days\n"
+            f"  rules:\n"
+            f"    - when: manual\n"
+            f"      allow_failure: true\n"
         )
 
     def _report_job(self, structure):
