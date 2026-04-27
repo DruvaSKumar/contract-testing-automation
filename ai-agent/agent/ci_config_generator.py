@@ -472,6 +472,7 @@ class CIConfigGenerator:
             f"  needs:\n"
             f"    - job: ai-agent-drift-check\n"
             f"      artifacts: true\n"
+            f"      optional: true\n"
             f"  before_script:\n"
             f"    - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv > /dev/null 2>&1\n"
             f"    - cd {ad}\n"
@@ -537,10 +538,16 @@ class CIConfigGenerator:
             f"    - cat ai-agent/reports/drift_report.txt 2>/dev/null || echo \"No drift report found\"\n"
             f"    - echo \"\"\n"
             f"    - echo \"=== END OF REPORT ===\"\n"
-            f"  dependencies:\n"
-            f"    - provider-contract-test\n"
-            f"    - consumer-contract-test\n"
-            f"    - ai-agent-drift-check\n"
+            f"  needs:\n"
+            f"    - job: provider-contract-test\n"
+            f"      optional: true\n"
+            f"      artifacts: true\n"
+            f"    - job: consumer-contract-test\n"
+            f"      optional: true\n"
+            f"      artifacts: true\n"
+            f"    - job: ai-agent-drift-check\n"
+            f"      optional: true\n"
+            f"      artifacts: true\n"
         )
 
     def _deploy_job(self, structure):

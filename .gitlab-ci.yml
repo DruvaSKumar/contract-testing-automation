@@ -247,10 +247,16 @@ contract-report:
     - cat ai-agent/reports/drift_report.txt 2>/dev/null || echo "No drift report found"
     - echo ""
     - echo "=== END OF REPORT ==="
-  dependencies:
-    - provider-contract-test
-    - consumer-contract-test
-    - ai-agent-drift-check
+  needs:
+    - job: provider-contract-test
+      optional: true
+      artifacts: true
+    - job: consumer-contract-test
+      optional: true
+      artifacts: true
+    - job: ai-agent-drift-check
+      optional: true
+      artifacts: true
 
 
 # ============================================================
@@ -276,6 +282,7 @@ auto-fix-contracts:
   needs:
     - job: ai-agent-drift-check
       artifacts: true
+      optional: true
   before_script:
     - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv > /dev/null 2>&1
     - cd ai-agent
