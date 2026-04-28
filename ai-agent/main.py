@@ -11,6 +11,10 @@
 #   python main.py drift                 Detect drift between spec and contracts
 #   python main.py report                Full report (drift + coverage)
 #   python main.py validate              Validate existing contracts against spec
+#   python main.py ci                    Generate .gitlab-ci.yml pipeline
+#   python main.py fix                   Auto-fix drifted/missing contracts (local)
+#   python main.py fix --create-mr       Auto-fix + create GitLab Merge Request
+#   python main.py dashboard             Start the Contract Health Dashboard
 #
 # PREREQUISITES:
 #   - Provider API must be running on http://localhost:8080
@@ -24,17 +28,22 @@
 #     report   → spec_reader + drift_detector + report_generator
 #     validate → spec_reader + drift_detector (focused on schema checks)
 #     ci       → ci_config_generator (generates .gitlab-ci.yml)
+#     fix      → spec_reader + drift_detector + contract_generator + mr_creator
+#     dashboard → Flask web UI (spec_reader + drift_detector)
 # ============================================================
 
 import argparse
 import os
 import sys
 
+import yaml
+
 from agent.spec_reader import OpenApiSpecReader
 from agent.contract_generator import ContractGenerator
 from agent.drift_detector import DriftDetector
 from agent.report_generator import ReportGenerator
 from agent.ci_config_generator import CIConfigGenerator
+from agent.mr_creator import MRCreator
 
 
 def get_default_contracts_dir():
@@ -289,6 +298,188 @@ def cmd_ci(args):
     return content
 
 
+def cmd_fix(args):
+    """
+    FIX command — Detects drift, regenerates affected contracts, and
+    optionally creates a GitLab Merge Request with the fixes.
+
+    Steps:
+      1. Fetch the current OpenAPI spec
+      2. Detect drift (drifted + uncovered contracts)
+      3. Regenerate contracts for all drifted/uncovered endpoints
+      4. If --create-mr flag is set, push changes and create a GitLab MR
+      5. Otherwise, just write the fixed files locally
+    """
+    print("\n" + "=" * 65)
+    print("  AI AGENT: Auto-Fix Drifted Contracts")
+    print("=" * 65)
+
+    # Step 1: Read the OpenAPI spec
+    reader = OpenApiSpecReader(args.provider_url)
+    try:
+        if args.spec_file:
+            reader.load_spec_from_file(args.spec_file)
+        else:
+            reader.fetch_spec()
+    except (ConnectionError, ValueError) as e:
+        print(str(e))
+        sys.exit(1)
+
+    # Step 2: Extract endpoints and detect drift
+    endpoints = reader.extract_endpoints()
+    detector = DriftDetector(contracts_dir=args.contracts_dir)
+    drift_results = detector.detect_drift(endpoints)
+
+    drifted = drift_results.get("drifted", [])
+    uncovered = drift_results.get("uncovered", [])
+
+    if not drifted and not uncovered:
+        print("\n  No drift detected — all contracts are in sync!")
+        print("  Nothing to fix.\n")
+        sys.exit(0)
+
+    print(f"\n  Found {len(drifted)} drifted and {len(uncovered)} uncovered endpoint(s).")
+
+    # Step 3: Regenerate contracts for affected endpoints
+    # Build a lookup from spec endpoints
+    spec_by_path = {}
+    for ep in endpoints:
+        key = (ep["method"].upper(), ep["path"])
+        spec_by_path[key] = ep
+
+    generator = ContractGenerator(output_dir=args.contracts_dir)
+    regenerated_files = {}  # {relative_path: yaml_content}
+
+    # Fix drifted contracts (schema mismatch → regenerate)
+    for item in drifted:
+        method = item["method"]
+        url = item["url"]
+        # Find the matching spec endpoint
+        matched_ep = _find_matching_endpoint(method, url, spec_by_path)
+        if matched_ep:
+            file_path = generator._build_file_path(matched_ep)
+            contract = generator._build_contract(matched_ep)
+            header = generator._build_header_comment(matched_ep)
+            yaml_content = header + yaml.dump(
+                contract, default_flow_style=False, sort_keys=False, allow_unicode=True
+            )
+            # Write locally
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(yaml_content)
+            # Track for MR (use relative path from project root)
+            rel_path = _to_relative_path(file_path)
+            regenerated_files[rel_path] = yaml_content
+            print(f"    Fixed: {method} {url} → {os.path.basename(file_path)}")
+
+    # Generate contracts for uncovered endpoints
+    for item in uncovered:
+        method = item["method"].upper()
+        path = item["path"]
+        key = (method, path)
+        ep = spec_by_path.get(key)
+        if ep:
+            file_path = generator._build_file_path(ep)
+            contract = generator._build_contract(ep)
+            header = generator._build_header_comment(ep)
+            yaml_content = header + yaml.dump(
+                contract, default_flow_style=False, sort_keys=False, allow_unicode=True
+            )
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(yaml_content)
+            rel_path = _to_relative_path(file_path)
+            regenerated_files[rel_path] = yaml_content
+            print(f"    Generated: {method} {path} → {os.path.basename(file_path)}")
+
+    print(f"\n  Total: {len(regenerated_files)} contract file(s) written locally.")
+
+    # Step 4: Create GitLab MR if requested
+    if args.create_mr:
+        print("\n  Creating GitLab Merge Request...")
+        try:
+            mr_creator = MRCreator()
+            result = mr_creator.create_fix_mr(
+                drift_results=drift_results,
+                regenerated_files=regenerated_files,
+                target_branch=args.target_branch,
+            )
+            if result["success"]:
+                print(f"\n  SUCCESS: {result['message']}")
+                print(f"  MR URL: {result['mr_url']}")
+            else:
+                print(f"\n  {result['message']}")
+        except ValueError as e:
+            print(f"\n  [ERROR] {e}")
+            print("  Files were written locally. Fix the configuration and retry with --create-mr.")
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f"\n  [ERROR] GitLab API error: {e}")
+            print("  Files were written locally. You can commit and push them manually.")
+            sys.exit(1)
+    else:
+        print("\n  Files written locally only.")
+        print("  To also create a GitLab MR, rerun with --create-mr flag:")
+        print("    python main.py fix --create-mr")
+        print("\n  Required env vars for MR creation:")
+        print("    GITLAB_TOKEN=<your-personal-access-token>")
+        print("    CI_PROJECT_ID=<numeric-project-id>  (auto-set in GitLab CI)")
+
+    print("")
+
+    # Save report if requested
+    if args.save_report:
+        reporter = ReportGenerator()
+        report = reporter.generate_drift_report(drift_results)
+        report_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "reports", "fix_report.txt"
+        )
+        reporter.save_report(report, report_path)
+
+    return regenerated_files
+
+
+def _find_matching_endpoint(method, contract_url, spec_by_path):
+    """
+    Finds the spec endpoint that matches a contract's method + URL.
+    Handles the mapping from concrete URLs (/api/users/1) to spec paths (/api/users/{id}).
+    """
+    import re
+
+    method = method.upper()
+
+    # Direct match first
+    for (m, path), ep in spec_by_path.items():
+        if m == method and path == contract_url:
+            return ep
+
+    # Pattern match: replace concrete values with path params
+    for (m, path), ep in spec_by_path.items():
+        if m != method:
+            continue
+        # Build regex from spec path: /api/users/{id} → /api/users/[^/]+
+        pattern = re.sub(r"\{[^}]+\}", "[^/]+", path)
+        if re.fullmatch(pattern, contract_url):
+            return ep
+
+    return None
+
+
+def _to_relative_path(abs_path):
+    """
+    Converts an absolute file path to a project-relative path.
+    e.g., C:\\Projects\\...\\provider-api\\src\\...\\file.yml → provider-api/src/.../file.yml
+    """
+    abs_path = os.path.normpath(abs_path)
+    # Walk up to find the project root marker (look for provider-api or consumer-api)
+    parts = abs_path.replace("\\", "/").split("/")
+    for i, part in enumerate(parts):
+        if part in ("provider-api", "consumer-api", "ai-agent"):
+            return "/".join(parts[i:])
+    # Fallback: just the filename
+    return os.path.basename(abs_path)
+
+
 def cmd_dashboard(args):
     """
     DASHBOARD command — Starts the Contract Health Dashboard web UI.
@@ -337,7 +528,10 @@ def main():
             "  python main.py drift                      Detect contract drift\n"
             "  python main.py report                     Full contract health report\n"
             "  python main.py validate                   Validate contracts (for CI/CD)\n"
-            "  python main.py ci                          Generate .gitlab-ci.yml pipeline\n"
+            "  python main.py ci                         Generate .gitlab-ci.yml pipeline\n"
+            "  python main.py fix                        Auto-fix drifted contracts (local)\n"
+            "  python main.py fix --create-mr            Auto-fix + create GitLab MR\n"
+            "  python main.py dashboard                  Start the health dashboard\n"
         ),
     )
 
@@ -433,6 +627,22 @@ def main():
         help="Run Flask in debug mode with auto-reload",
     )
 
+    # --- fix ---
+    fix_parser = subparsers.add_parser(
+        "fix",
+        help="Auto-fix drifted/missing contracts and optionally create a GitLab MR",
+    )
+    fix_parser.add_argument(
+        "--create-mr",
+        action="store_true",
+        help="Create a GitLab Merge Request with the fixed contracts",
+    )
+    fix_parser.add_argument(
+        "--target-branch",
+        default="main",
+        help="Target branch for the MR (default: main)",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -446,6 +656,7 @@ def main():
         "report": cmd_report,
         "validate": cmd_validate,
         "ci": cmd_ci,
+        "fix": cmd_fix,
         "dashboard": cmd_dashboard,
     }
 
