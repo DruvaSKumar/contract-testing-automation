@@ -22,7 +22,7 @@
 #
 # PREREQUISITES:
 #   - GITLAB_TOKEN environment variable (Personal Access Token with api scope)
-#   - GITLAB_PROJECT_ID environment variable (numeric project ID)
+#   - CI_PROJECT_ID environment variable (built-in GitLab CI variable)
 #   - Optionally GITLAB_URL (defaults to https://gitlab.com)
 # ============================================================
 
@@ -45,18 +45,18 @@ class MRCreator:
         """
         Args:
             gitlab_url:  GitLab instance URL (default: GITLAB_URL env or https://gitlab.com)
-            project_id:  Numeric GitLab project ID (default: GITLAB_PROJECT_ID env)
+            project_id:  Numeric GitLab project ID (default: CI_PROJECT_ID env)
             token:       GitLab Personal Access Token (default: GITLAB_TOKEN env)
         """
         self.gitlab_url = (gitlab_url or os.environ.get("GITLAB_URL", "https://gitlab.com")).rstrip("/")
-        self.project_id = project_id or os.environ.get("GITLAB_PROJECT_ID")
+        self.project_id = project_id or os.environ.get("CI_PROJECT_ID")
         self.token = token or os.environ.get("GITLAB_TOKEN")
 
         if not self.project_id:
             raise ValueError(
                 "GitLab project ID not configured.\n"
-                "  Set GITLAB_PROJECT_ID environment variable or pass project_id parameter.\n"
-                "  Find it at: GitLab → Your Project → Settings → General"
+                "  Set CI_PROJECT_ID environment variable (auto-set in GitLab CI).\n"
+                "  For local use, set it manually or pass project_id parameter."
             )
         if not self.token:
             raise ValueError(

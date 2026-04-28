@@ -423,7 +423,7 @@ def cmd_fix(args):
         print("    python main.py fix --create-mr")
         print("\n  Required env vars for MR creation:")
         print("    GITLAB_TOKEN=<your-personal-access-token>")
-        print("    GITLAB_PROJECT_ID=<numeric-project-id>")
+        print("    CI_PROJECT_ID=<numeric-project-id>  (auto-set in GitLab CI)")
 
     print("")
 

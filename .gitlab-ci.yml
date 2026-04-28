@@ -271,7 +271,7 @@ contract-report:
 #
 # Prerequisites (CI/CD Variables in GitLab):
 #   GITLAB_TOKEN      — Personal Access Token (api scope)
-#   GITLAB_PROJECT_ID — Numeric project ID
+#   CI_PROJECT_ID    — Built-in GitLab CI variable (auto-set)
 #
 # The MR is created automatically and linked in the job output.
 # A human reviews and merges — keeping the process safe.

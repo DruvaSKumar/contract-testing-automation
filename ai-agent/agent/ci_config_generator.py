@@ -461,7 +461,7 @@ class CIConfigGenerator:
             f"#\n"
             f"# Prerequisites (CI/CD Variables in GitLab):\n"
             f"#   GITLAB_TOKEN      — Personal Access Token (api scope)\n"
-            f"#   GITLAB_PROJECT_ID — Numeric project ID\n"
+            f"#   CI_PROJECT_ID    — Built-in GitLab CI variable (auto-set)\n"
             f"#\n"
             f"# The MR is created automatically and linked in the job output.\n"
             f"# A human reviews and merges — keeping the process safe.\n"
