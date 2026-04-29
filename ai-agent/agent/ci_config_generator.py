@@ -10,7 +10,8 @@
 #     3. Generates stubs JAR
 #     4. Runs Consumer tests against stubs
 #     5. Runs AI agent drift detection
-#     6. Blocks deployment on any contract failure
+#     6. Sends team notifications on failures
+#     7. Blocks deployment on any contract failure
 #
 # WHY IS THIS NEEDED?
 #   Manually writing CI/CD pipelines is tedious and error-prone.
@@ -176,6 +177,10 @@ class CIConfigGenerator:
         # Report job
         sections.append(self._report_job(structure))
 
+        # Notification job (on failure)
+        if structure["has_ai_agent"]:
+            sections.append(self._notify_job(structure))
+
         # Auto-fix job (manual trigger)
         if structure["has_ai_agent"]:
             sections.append(self._auto_fix_job(structure))
@@ -195,7 +200,7 @@ class CIConfigGenerator:
             "# This pipeline automates contract testing on every push:\n"
             "#   1. BUILD:  Compile Provider and Consumer APIs\n"
             "#   2. TEST:   Run contract verification tests\n"
-            "#   3. REPORT: Generate contract coverage report\n"
+            "#   3. REPORT: Generate contract coverage report + send notifications\n"
             "#   4. DEPLOY: Gated — only deploys if ALL tests pass\n"
             "#\n"
             "# Contract test failures BLOCK deployment, preventing\n"
@@ -430,10 +435,10 @@ class CIConfigGenerator:
             f"        echo \"Waiting for Provider... ($i/30)\"\n"
             f"        sleep 2\n"
             f"      done\n"
-            f"    # Run drift detection\n"
+            f"    # Run drift detection with auto-notifications\n"
             f"    - cd $CI_PROJECT_DIR/{ad}\n"
             f"    - . .venv/bin/activate\n"
-            f"    - python3 main.py --save-report drift\n"
+            f"    - python3 main.py --save-report --notify drift\n"
             f"    # Cleanup — stop the Provider\n"
             f"    - kill $PROVIDER_PID 2>/dev/null || true\n"
             f"  artifacts:\n"
@@ -494,10 +499,10 @@ class CIConfigGenerator:
             f"        echo \"Waiting for Provider... ($i/30)\"\n"
             f"        sleep 2\n"
             f"      done\n"
-            f"    # Run auto-fix with MR creation\n"
+            f"    # Run auto-fix with MR creation + auto-notifications\n"
             f"    - cd $CI_PROJECT_DIR/{ad}\n"
             f"    - . .venv/bin/activate\n"
-            f"    - python3 main.py --save-report fix --create-mr\n"
+            f"    - python3 main.py --save-report --notify fix --create-mr\n"
             f"    # Cleanup\n"
             f"    - kill $PROVIDER_PID 2>/dev/null || true\n"
             f"  artifacts:\n"
@@ -548,6 +553,75 @@ class CIConfigGenerator:
             f"    - job: ai-agent-drift-check\n"
             f"      optional: true\n"
             f"      artifacts: true\n"
+        )
+
+    def _notify_job(self, structure):
+        pd = structure["provider_dir"]
+        ad = structure["ai_agent_dir"]
+        return (
+            f"\n"
+            f"# ============================================================\n"
+            f"# JOB: AI Agent — Team Notifications\n"
+            f"# ============================================================\n"
+            f"# Sends Slack and/or email notifications with a summary of\n"
+            f"# contract test results. Runs ALWAYS so the developer gets\n"
+            f"# an email after every pipeline — pass or fail.\n"
+            f"#\n"
+            f"# Individual jobs (drift-check, auto-fix) also auto-notify\n"
+            f"# via the --notify flag, but this job provides a final\n"
+            f"# consolidated notification after all results are in.\n"
+            f"#\n"
+            f"# Prerequisites (CI/CD Variables in GitLab):\n"
+            f"#   SLACK_WEBHOOK_URL — Slack incoming webhook URL\n"
+            f"#   SMTP_HOST         — SMTP relay server (e.g., smtp.bottomline.com)\n"
+            f"#   SMTP_FROM         — Sender address (default: contract-agent@noreply.bottomline.com)\n"
+            f"#   NOTIFY_EMAILS     — Comma-separated recipients\n"
+            f"#                        (default: Druva.SKumar@bottomline.com)\n"
+            f"#\n"
+            f"#   No password needed — uses unauthenticated relay (like GitLab does).\n"
+            f"#   Only set SMTP_USER + SMTP_PASSWORD if the relay requires auth.\n"
+            f"# ============================================================\n"
+            f"notify-team:\n"
+            f"  stage: report\n"
+            f"  when: always\n"
+            f"  image: maven:3.9-eclipse-temurin-22\n"
+            f"  needs:\n"
+            f"    - job: provider-contract-test\n"
+            f"      optional: true\n"
+            f"      artifacts: true\n"
+            f"    - job: consumer-contract-test\n"
+            f"      optional: true\n"
+            f"      artifacts: true\n"
+            f"    - job: ai-agent-drift-check\n"
+            f"      optional: true\n"
+            f"      artifacts: true\n"
+            f"  before_script:\n"
+            f"    - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv > /dev/null 2>&1\n"
+            f"    - cd {ad}\n"
+            f"    - python3 -m venv .venv\n"
+            f"    - . .venv/bin/activate\n"
+            f"    - pip install -q -r requirements.txt\n"
+            f"  script:\n"
+            f"    # Start Provider API in background for drift check\n"
+            f"    - cd $CI_PROJECT_DIR/{pd}\n"
+            f"    - mvn $MAVEN_CLI_OPTS spring-boot:run &\n"
+            f"    - PROVIDER_PID=$!\n"
+            f"    - |\n"
+            f"      for i in $(seq 1 30); do\n"
+            f"        if curl -s http://localhost:8080/v3/api-docs > /dev/null 2>&1; then\n"
+            f"          echo \"Provider is ready!\"\n"
+            f"          break\n"
+            f"        fi\n"
+            f"        echo \"Waiting for Provider... ($i/30)\"\n"
+            f"        sleep 2\n"
+            f"      done\n"
+            f"    # Send report notification (always — even on healthy)\n"
+            f"    - cd $CI_PROJECT_DIR/{ad}\n"
+            f"    - . .venv/bin/activate\n"
+            f"    - python3 main.py --notify --save-report --pipeline-url \"$CI_PIPELINE_URL\" report\n"
+            f"    # Cleanup\n"
+            f"    - kill $PROVIDER_PID 2>/dev/null || true\n"
+            f"  allow_failure: true\n"
         )
 
     def _deploy_job(self, structure):
