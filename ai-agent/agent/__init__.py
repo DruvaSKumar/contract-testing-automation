@@ -8,6 +8,7 @@
 #   - report_generator:     Generates reports with remediation suggestions
 #   - ci_config_generator:  Generates GitLab CI pipeline configuration
 #   - mr_creator:           Creates GitLab MRs with auto-fixed contracts
+#   - notifier:             Sends Slack/email notifications on drift
 # ============================================================
 
 __version__ = "1.0.0"

@@ -9,11 +9,14 @@
 #   python main.py generate              Generate contracts from OpenAPI spec
 #   python main.py generate --overwrite  Regenerate all contracts (overwrite existing)
 #   python main.py drift                 Detect drift between spec and contracts
+#   python main.py drift --notify         Detect drift + auto-send notifications
 #   python main.py report                Full report (drift + coverage)
+#   python main.py report --notify        Full report + email summary to team
 #   python main.py validate              Validate existing contracts against spec
 #   python main.py ci                    Generate .gitlab-ci.yml pipeline
 #   python main.py fix                   Auto-fix drifted/missing contracts (local)
 #   python main.py fix --create-mr       Auto-fix + create GitLab Merge Request
+#   python main.py notify                Send Slack/email notification on drift
 #   python main.py dashboard             Start the Contract Health Dashboard
 #
 # PREREQUISITES:
@@ -29,6 +32,7 @@
 #     validate → spec_reader + drift_detector (focused on schema checks)
 #     ci       → ci_config_generator (generates .gitlab-ci.yml)
 #     fix      → spec_reader + drift_detector + contract_generator + mr_creator
+#     notify   → spec_reader + drift_detector + notifier (Slack/email)
 #     dashboard → Flask web UI (spec_reader + drift_detector)
 # ============================================================
 
@@ -44,6 +48,7 @@ from agent.drift_detector import DriftDetector
 from agent.report_generator import ReportGenerator
 from agent.ci_config_generator import CIConfigGenerator
 from agent.mr_creator import MRCreator
+from agent.notifier import Notifier
 
 
 def get_default_contracts_dir():
@@ -150,6 +155,12 @@ def cmd_drift(args):
         )
         reporter.save_report(report, report_path)
 
+    # Auto-notify if --notify flag is set
+    if args.notify:
+        notifier = Notifier()
+        result = notifier.auto_notify(drift_results, command_name="drift", pipeline_url=args.pipeline_url)
+        _print_notify_result(result)
+
     # Return non-zero exit code if critical issues found
     health = drift_results.get("summary", {}).get("health", "UNKNOWN")
     if health == "CRITICAL":
@@ -198,6 +209,12 @@ def cmd_report(args):
             os.path.dirname(os.path.abspath(__file__)), "reports", "full_report.txt"
         )
         reporter.save_report(report, report_path)
+
+    # Auto-notify if --notify flag is set
+    if args.notify:
+        notifier = Notifier()
+        result = notifier.auto_notify(drift_results, command_name="report", pipeline_url=args.pipeline_url)
+        _print_notify_result(result)
 
     return drift_results
 
@@ -258,6 +275,12 @@ def cmd_validate(args):
         print("  No issues found.")
 
     print("")
+
+    # Auto-notify if --notify flag is set
+    if args.notify:
+        notifier = Notifier()
+        result = notifier.auto_notify(drift_results, command_name="validate", pipeline_url=args.pipeline_url)
+        _print_notify_result(result)
 
     # Exit code for CI/CD integration
     if drifted:
@@ -436,6 +459,12 @@ def cmd_fix(args):
         )
         reporter.save_report(report, report_path)
 
+    # Auto-notify if --notify flag is set
+    if args.notify:
+        notifier = Notifier()
+        result = notifier.auto_notify(drift_results, command_name="fix", pipeline_url=args.pipeline_url)
+        _print_notify_result(result)
+
     return regenerated_files
 
 
@@ -508,6 +537,76 @@ def cmd_dashboard(args):
     app.run(host="0.0.0.0", port=port, debug=args.debug)
 
 
+def cmd_notify(args):
+    """
+    NOTIFY command — Runs drift detection and sends notifications
+    to Slack and/or email if issues are found.
+
+    Steps:
+      1. Fetch the current OpenAPI spec
+      2. Run drift detection
+      3. If drift found (WARNING or CRITICAL), send notification
+      4. Optionally notify about a specific test failure
+    """
+    print("\n" + "=" * 65)
+    print("  AI AGENT: Team Notification")
+    print("=" * 65)
+
+    # If notifying about a specific test failure
+    if args.job_name:
+        notifier = Notifier()
+        result = notifier.notify_test_failure(
+            job_name=args.job_name,
+            exit_code=args.exit_code,
+            log_snippet=args.log_snippet,
+            pipeline_url=args.pipeline_url,
+        )
+        _print_notify_result(result)
+        return
+
+    # Otherwise, run drift detection and notify
+    reader = OpenApiSpecReader(args.provider_url)
+    try:
+        if args.spec_file:
+            reader.load_spec_from_file(args.spec_file)
+        else:
+            reader.fetch_spec()
+    except (ConnectionError, ValueError) as e:
+        print(str(e))
+        sys.exit(1)
+
+    endpoints = reader.extract_endpoints()
+    detector = DriftDetector(contracts_dir=args.contracts_dir)
+    drift_results = detector.detect_drift(endpoints)
+
+    summary = drift_results.get("summary", {})
+    health = summary.get("health", "UNKNOWN")
+    print(f"\n  Health: {health}")
+    print(f"  Coverage: {summary.get('coverage_percent', '?')}%")
+
+    notifier = Notifier()
+    result = notifier.notify_drift(
+        drift_results=drift_results,
+        pipeline_url=args.pipeline_url,
+    )
+    _print_notify_result(result)
+
+
+def _print_notify_result(result):
+    """Prints a summary of notification results."""
+    sent_any = False
+    if result.get("slack"):
+        print("  Slack: Sent")
+        sent_any = True
+    if result.get("email"):
+        print("  Email: Sent")
+        sent_any = True
+    if not sent_any:
+        print("\n  No notifications sent.")
+        print("  Configure SLACK_WEBHOOK_URL and/or SMTP_HOST to enable.")
+    print("")
+
+
 def main():
     """
     Main entry point — parses CLI arguments and dispatches to the
@@ -526,11 +625,14 @@ def main():
             "  python main.py generate --overwrite       Regenerate all contracts\n"
             "  python main.py generate --spec-file spec.json    Generate from saved spec file\n"
             "  python main.py drift                      Detect contract drift\n"
+            "  python main.py drift --notify             Drift detection + auto-notify\n"
             "  python main.py report                     Full contract health report\n"
+            "  python main.py report --notify            Report + email summary to team\n"
             "  python main.py validate                   Validate contracts (for CI/CD)\n"
             "  python main.py ci                         Generate .gitlab-ci.yml pipeline\n"
             "  python main.py fix                        Auto-fix drifted contracts (local)\n"
             "  python main.py fix --create-mr            Auto-fix + create GitLab MR\n"
+            "  python main.py notify                     Send notifications on drift\n"
             "  python main.py dashboard                  Start the health dashboard\n"
         ),
     )
@@ -555,6 +657,16 @@ def main():
         "--save-report",
         action="store_true",
         help="Save the report to a file in ai-agent/reports/",
+    )
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="Auto-send Slack/email notifications when issues are detected",
+    )
+    parser.add_argument(
+        "--pipeline-url",
+        default=os.environ.get("CI_PIPELINE_URL"),
+        help="GitLab pipeline URL to include in notifications (auto-set in CI)",
     )
 
     # Subcommands
@@ -643,6 +755,28 @@ def main():
         help="Target branch for the MR (default: main)",
     )
 
+    # --- notify ---
+    notify_parser = subparsers.add_parser(
+        "notify",
+        help="Send Slack/email notification on contract drift or test failure",
+    )
+    notify_parser.add_argument(
+        "--job-name",
+        default=None,
+        help="CI job name (for test failure notifications)",
+    )
+    notify_parser.add_argument(
+        "--exit-code",
+        type=int,
+        default=1,
+        help="Exit code of the failed job (default: 1)",
+    )
+    notify_parser.add_argument(
+        "--log-snippet",
+        default=None,
+        help="Last lines of log output from the failed job",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -657,6 +791,7 @@ def main():
         "validate": cmd_validate,
         "ci": cmd_ci,
         "fix": cmd_fix,
+        "notify": cmd_notify,
         "dashboard": cmd_dashboard,
     }
 

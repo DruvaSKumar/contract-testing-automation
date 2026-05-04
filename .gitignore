@@ -63,3 +63,4 @@ Desktop.ini               # Windows folder settings
 # ----- Project-specific -----
 DEMO_SCRIPT.txt           # Personal demo script (not for repo)
 CONFLUENCE_PAGE.md        # Internal documentation (not for repo)
+ai-agent/reports/         # Generated reports and notification previews
