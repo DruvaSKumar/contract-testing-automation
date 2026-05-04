@@ -19,10 +19,10 @@
 # CONFIGURATION (environment variables):
 #   Slack:
 #     SLACK_WEBHOOK_URL  — Incoming webhook URL from Slack app
-#   Email (via GitLab commit comments — GitLab emails you automatically):
+#   Email (via GitLab Issue Notes — GitLab emails subscribers automatically):
 #     GITLAB_TOKEN       — GitLab Personal Access Token (api scope)
 #     CI_PROJECT_ID      — GitLab project ID (auto-set in CI)
-#     CI_COMMIT_SHA      — Commit SHA to comment on (auto-set in CI)
+#     CI_COMMIT_SHA      — Commit SHA for context (auto-set in CI)
 #   Fallback Email (direct SMTP — optional):
 #     SMTP_HOST          — SMTP server hostname
 #     SMTP_PORT          — SMTP server port (default: 587)
@@ -31,9 +31,11 @@
 #     SMTP_PASSWORD      — (Optional) SMTP password
 #     NOTIFY_EMAILS      — Comma-separated recipient email addresses
 #
-#   PRIMARY METHOD: GitLab API commit comments
-#   - Posts a comment on the commit → GitLab sends email from gitlab@mg.gitlab.com
-#   - No SMTP config needed, no passwords for email
+#   PRIMARY METHOD: GitLab Issue Notes
+#   - Creates a dedicated "Contract Testing Notifications" issue
+#   - Posts each notification as a comment on that issue
+#   - GitLab emails ALL issue subscribers from gitlab@mg.gitlab.com
+#   - Subscribe to the issue once → get all future notifications
 #   - Just needs GITLAB_TOKEN (already set for MR creation)
 # ============================================================
 
@@ -361,36 +363,111 @@ class Notifier:
     # ----------------------------------------------------------------
     # GitLab API (primary notification method)
     # ----------------------------------------------------------------
+    # Uses GitLab Issue Notes — posting a comment on an issue you're
+    # subscribed to ALWAYS triggers an email from gitlab@mg.gitlab.com.
+    # Much more reliable than commit comments which only email the author.
+    # ----------------------------------------------------------------
+
+    def _get_or_create_notification_issue(self):
+        """
+        Finds or creates a dedicated 'Contract Testing Notifications' issue.
+        Returns the issue IID (internal ID) or None on failure.
+        """
+        headers = {"PRIVATE-TOKEN": self.gitlab_token}
+        base_url = f"{self.gitlab_api_url}/projects/{self.gitlab_project_id}"
+        label = "contract-notifications"
+        title = "Contract Testing — Automated Notifications"
+
+        # Search for existing open notification issue
+        try:
+            search_url = f"{base_url}/issues"
+            params = {"labels": label, "state": "opened", "per_page": 1}
+            resp = requests.get(search_url, headers=headers, params=params, timeout=10)
+            if resp.status_code == 200 and resp.json():
+                issue = resp.json()[0]
+                return issue["iid"]
+        except requests.RequestException:
+            pass
+
+        # Create a new notification issue
+        try:
+            create_url = f"{base_url}/issues"
+            body = {
+                "title": title,
+                "description": (
+                    "This issue receives automated notifications from the "
+                    "Contract Testing AI Agent.\n\n"
+                    "**Subscribe to this issue** to receive email notifications "
+                    "for contract drift, test failures, and health reports.\n\n"
+                    "Each pipeline run posts a comment here with the results.\n\n"
+                    "_Do not close this issue — it is used for ongoing notifications._"
+                ),
+                "labels": label,
+            }
+            resp = requests.post(
+                create_url, headers=headers, json=body, timeout=15
+            )
+            if resp.status_code in (200, 201):
+                issue = resp.json()
+                print(f"  [NOTIFIER] Created notification issue #{issue['iid']}: {issue['web_url']}")
+                return issue["iid"]
+            else:
+                print(f"  [NOTIFIER] Failed to create issue: {resp.status_code} — {resp.text[:200]}")
+                return None
+        except requests.RequestException as e:
+            print(f"  [NOTIFIER] Error creating issue: {e}")
+            return None
 
     def _send_gitlab_note(self, subject, body_text):
         """
-        Posts a commit comment via GitLab API.
-        GitLab will automatically email all project watchers from gitlab@mg.gitlab.com.
+        Posts a note (comment) on the dedicated notification issue.
+        GitLab emails all subscribers from gitlab@mg.gitlab.com.
 
-        Requires env vars: GITLAB_TOKEN, CI_PROJECT_ID, CI_COMMIT_SHA
+        This is MORE reliable than commit comments because:
+        - Issue note notifications go to ALL subscribers
+        - Commit comments only notify the commit author + @mentioned
         """
-        if not all([self.gitlab_token, self.gitlab_project_id, self.gitlab_commit_sha]):
-            print("  [NOTIFIER] GitLab API not configured (missing GITLAB_TOKEN/CI_PROJECT_ID/CI_COMMIT_SHA).")
+        if not all([self.gitlab_token, self.gitlab_project_id]):
+            print("  [NOTIFIER] GitLab API not configured (missing GITLAB_TOKEN/CI_PROJECT_ID).")
             return False
 
-        url = (
-            f"{self.gitlab_api_url}/projects/{self.gitlab_project_id}"
-            f"/repository/commits/{self.gitlab_commit_sha}/comments"
-        )
         headers = {"PRIVATE-TOKEN": self.gitlab_token}
 
-        # Format as Markdown for GitLab rendering
-        note_body = f"## {subject}\n\n```\n{body_text}\n```\n\n---\n_Posted by Contract Testing AI Agent_"
+        # Get or create the notification issue
+        issue_iid = self._get_or_create_notification_issue()
+        if not issue_iid:
+            return False
+
+        # Post a comment on the issue
+        url = (
+            f"{self.gitlab_api_url}/projects/{self.gitlab_project_id}"
+            f"/issues/{issue_iid}/notes"
+        )
+
+        # Build Markdown note with pipeline context
+        pipeline_url = os.environ.get("CI_PIPELINE_URL", "")
+        commit_sha = self.gitlab_commit_sha or "unknown"
+        pipeline_link = f"[Pipeline]({pipeline_url})" if pipeline_url else ""
+        commit_link = f"`{commit_sha[:8]}`" if commit_sha != "unknown" else ""
+
+        note_body = (
+            f"## {subject}\n\n"
+            f"**Commit:** {commit_link} | {pipeline_link}\n\n"
+            f"```\n{body_text}\n```\n\n"
+            f"---\n"
+            f"_Posted automatically by Contract Testing AI Agent — "
+            f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}_"
+        )
 
         try:
             resp = requests.post(
                 url,
                 headers=headers,
-                json={"note": note_body},
+                json={"body": note_body},
                 timeout=15,
             )
             if resp.status_code in (200, 201):
-                print("  [NOTIFIER] GitLab commit comment posted — email will be sent by GitLab.")
+                print(f"  [NOTIFIER] Posted to notification issue #{issue_iid} — GitLab will email subscribers.")
                 return True
             else:
                 print(f"  [NOTIFIER] GitLab API failed: {resp.status_code} — {resp.text[:200]}")
