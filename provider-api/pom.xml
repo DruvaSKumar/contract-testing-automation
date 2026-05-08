@@ -36,7 +36,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
+        <version>3.3.8</version>
         <!-- Empty relativePath means "download from Maven Central" -->
         <relativePath/>
     </parent>
@@ -66,17 +66,17 @@
       These are like "constants" you can reference with ${property.name}
     -->
     <properties>
-        <!-- Java version for compilation. We use 17 for maximum compatibility
-             with Spring Boot 3.x. Your JDK 25 can compile Java 17 code fine. -->
+        <!-- Java version for compilation. Updated to 17 target with JDK 25.
+             Spring Boot 3.3.x officially supports Java 22+ and runs fine on 25. -->
         <java.version>17</java.version>
 
         <!-- Spring Cloud BOM (Bill of Materials) version.
              This manages versions of ALL Spring Cloud libraries so they're
-             compatible with each other. 2023.0.3 works with Spring Boot 3.2.x -->
-        <spring-cloud.version>2023.0.3</spring-cloud.version>
+             compatible with each other. 2023.0.4 works with Spring Boot 3.3.x -->
+        <spring-cloud.version>2023.0.4</spring-cloud.version>
 
         <!-- springdoc-openapi version for auto-generating API documentation.
-             Version 2.x works with Spring Boot 3.x (Jakarta namespace) -->
+             Version 2.5.0 works with Spring Boot 3.3.x (Jakarta namespace) -->
         <springdoc.version>2.5.0</springdoc.version>
     </properties>
 
@@ -246,7 +246,7 @@
             <plugin>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-contract-maven-plugin</artifactId>
-                <version>4.1.3</version>
+                <version>4.1.5</version>
                 <extensions>true</extensions>
                 <configuration>
                     <!--
