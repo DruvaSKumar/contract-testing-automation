@@ -272,12 +272,13 @@ contract-report:
 #
 # Prerequisites (CI/CD Variables in GitLab):
 #   SLACK_WEBHOOK_URL — Slack incoming webhook URL
-#   SMTP_HOST         — SMTP relay server (e.g., smtp.bottomline.com)
-#   SMTP_FROM         — Sender address (default: contract-agent@noreply.bottomline.com)
+#   SMTP_HOST         — SMTP relay servers, comma-separated (fallback order)
+#                        Default: inf-npr1-smtp01.saas-n.com,inf-ny2-nonprod-smtplb02.dmz.saas-n.com
+#   SMTP_FROM         — Sender address (default: noreply@btbpo.net)
 #   NOTIFY_EMAILS     — Comma-separated recipients
 #                        (default: Druva.SKumar@bottomline.com)
 #
-#   No password needed — uses unauthenticated relay (like GitLab does).
+#   No password needed — uses unauthenticated corporate relay.
 #   Only set SMTP_USER + SMTP_PASSWORD if the relay requires auth.
 # ============================================================
 notify-team:

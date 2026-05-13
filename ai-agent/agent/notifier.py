@@ -23,20 +23,18 @@
 #     GITLAB_TOKEN       — GitLab Personal Access Token (api scope)
 #     CI_PROJECT_ID      — GitLab project ID (auto-set in CI)
 #     CI_COMMIT_SHA      — Commit SHA for context (auto-set in CI)
-#   Fallback Email (direct SMTP — optional):
-#     SMTP_HOST          — SMTP server hostname
-#     SMTP_PORT          — SMTP server port (default: 587)
-#     SMTP_FROM          — Sender address
-#     SMTP_USER          — (Optional) SMTP username
-#     SMTP_PASSWORD      — (Optional) SMTP password
+#   Email (direct SMTP — primary delivery method):
+#     SMTP_HOST          — Comma-separated SMTP hostnames (fallback order)
+#                          Default: inf-npr1-smtp01.saas-n.com,inf-ny2-nonprod-smtplb02.dmz.saas-n.com
+#     SMTP_PORT          — Comma-separated ports to try (default: 25,587)
+#     SMTP_FROM          — Sender address (default: noreply@btbpo.net)
+#     SMTP_USER          — (Optional) SMTP username — not needed for corp relay
+#     SMTP_PASSWORD      — (Optional) SMTP password — not needed for corp relay
 #     NOTIFY_EMAILS      — Comma-separated recipient email addresses
 #
-#   PRIMARY METHOD: GitLab Issue Notes
-#   - Creates a dedicated "Contract Testing Notifications" issue
-#   - Posts each notification as a comment on that issue
-#   - GitLab emails ALL issue subscribers from gitlab@mg.gitlab.com
-#   - Subscribe to the issue once → get all future notifications
-#   - Just needs GITLAB_TOKEN (already set for MR creation)
+#   PRIMARY METHOD: Direct SMTP via corporate relay (no auth needed)
+#   SECONDARY: GitLab Issue Notes (subscribers get emails from gitlab@mg.gitlab.com)
+#   LAST RESORT: Save email locally for verification
 # ============================================================
 
 import json
@@ -51,8 +49,15 @@ import requests
 
 
 # Default notification sender and recipients
-DEFAULT_SMTP_FROM = "contract-agent@noreply.bottomline.com"
+DEFAULT_SMTP_FROM = "noreply@btbpo.net"
 DEFAULT_NOTIFY_EMAILS = "Druva.SKumar@bottomline.com"
+
+# Corporate SMTP relays (in priority order)
+DEFAULT_SMTP_HOSTS = [
+    "inf-npr1-smtp01.saas-n.com",
+    "inf-ny2-nonprod-smtplb02.dmz.saas-n.com",
+]
+DEFAULT_SMTP_PORTS = [25, 587]
 
 
 class Notifier:
@@ -66,9 +71,9 @@ class Notifier:
         Args:
             slack_webhook_url: Slack incoming webhook URL.
                                Defaults to SLACK_WEBHOOK_URL env var.
-            smtp_config:       Dict with keys: host, port, from_addr, user, password, recipients.
-                               Defaults to SMTP_* env vars. SMTP is a fallback —
-                               primary delivery is via GitLab commit comments.
+            smtp_config:       Dict with keys: hosts, ports, from_addr, user, password, recipients.
+                               Defaults to corporate SMTP relays (no auth needed).
+                               SMTP is the primary delivery method.
         """
         self.slack_webhook_url = slack_webhook_url or os.environ.get("SLACK_WEBHOOK_URL")
 
@@ -78,22 +83,35 @@ class Notifier:
         self.gitlab_commit_sha = os.environ.get("CI_COMMIT_SHA")
         self.gitlab_api_url = os.environ.get("CI_API_V4_URL", "https://gitlab.com/api/v4")
 
-        # SMTP config (fallback if GitLab API is not available)
+        # SMTP config — primary email delivery via corporate relay
         if smtp_config:
             self.smtp = smtp_config
         else:
-            host = os.environ.get("SMTP_HOST")
+            # Support comma-separated hosts in SMTP_HOST, or fall back to defaults
+            host_env = os.environ.get("SMTP_HOST", "")
+            if host_env:
+                hosts = [h.strip() for h in host_env.split(",") if h.strip()]
+            else:
+                hosts = list(DEFAULT_SMTP_HOSTS)
+
+            # Support comma-separated ports, or fall back to defaults
+            port_env = os.environ.get("SMTP_PORT", "")
+            if port_env:
+                ports = [int(p.strip()) for p in port_env.split(",") if p.strip()]
+            else:
+                ports = list(DEFAULT_SMTP_PORTS)
+
             recipients_raw = os.environ.get("NOTIFY_EMAILS", DEFAULT_NOTIFY_EMAILS)
             self.smtp = {
-                "host": host,
-                "port": int(os.environ.get("SMTP_PORT", "587")),
+                "hosts": hosts,
+                "ports": ports,
                 "from_addr": os.environ.get("SMTP_FROM", DEFAULT_SMTP_FROM),
                 "user": os.environ.get("SMTP_USER"),        # Optional
                 "password": os.environ.get("SMTP_PASSWORD"),  # Optional
                 "recipients": [
                     e.strip() for e in recipients_raw.split(",") if e.strip()
                 ],
-            } if host else None
+            }
 
     # ----------------------------------------------------------------
     # Public API
@@ -478,35 +496,44 @@ class Notifier:
 
     def _send_notification(self, subject, body_text):
         """
-        Unified notification delivery: tries GitLab API first, then SMTP, then local file.
+        Unified notification delivery — tries SMTP first (corporate relay),
+        then GitLab issue notes, then local file as last resort.
         """
-        # 1. Try GitLab commit comment (triggers email from gitlab@mg.gitlab.com)
-        if self._send_gitlab_note(subject, body_text):
-            return True
-
-        # 2. Fallback: direct SMTP
+        # 1. Primary: direct SMTP via corporate relay
         if self.smtp and self.smtp.get("recipients"):
             if self._send_email(subject, body_text):
+                # Also try GitLab note as supplementary (non-blocking)
+                if self.gitlab_token and self.gitlab_project_id:
+                    try:
+                        self._send_gitlab_note(subject, body_text)
+                    except Exception:
+                        pass
                 return True
+
+        # 2. Fallback: GitLab issue note (triggers email from gitlab@mg.gitlab.com)
+        if self._send_gitlab_note(subject, body_text):
+            return True
 
         # 3. Last resort: save locally
         from_addr = (self.smtp or {}).get("from_addr", DEFAULT_SMTP_FROM)
         return self._save_email_locally(subject, body_text, from_addr)
 
     # ----------------------------------------------------------------
-    # Email (SMTP fallback)
+    # Email (SMTP — primary delivery)
     # ----------------------------------------------------------------
 
     def _send_email(self, subject, body_text):
         """
-        Sends an email notification via SMTP.
+        Sends an email notification via SMTP corporate relay.
 
-        Always attempts STARTTLS (most corporate relays require it).
-        Authentication is optional — only logs in if SMTP_USER/PASSWORD are set.
+        Tries each configured host + port combination in order until one succeeds:
+          1. inf-npr1-smtp01.saas-n.com (port 25, then 587)
+          2. inf-ny2-nonprod-smtplb02.dmz.saas-n.com (port 25, then 587)
 
-        If the SMTP server is unreachable (e.g., corporate relay from local machine),
-        falls back to saving the email as a file in ai-agent/reports/notifications/
-        so you can verify the content locally.
+        Port 25  — plain SMTP relay (no TLS, no auth — standard for internal relays)
+        Port 587 — submission port (attempts STARTTLS, then auth if configured)
+
+        Falls back to saving email locally if all hosts are unreachable.
         """
         if not self.smtp:
             return False
@@ -515,44 +542,62 @@ class Notifier:
         user = self.smtp.get("user")
         password = self.smtp.get("password")
         requires_auth = bool(user and password)
+        hosts = self.smtp.get("hosts", DEFAULT_SMTP_HOSTS)
+        ports = self.smtp.get("ports", DEFAULT_SMTP_PORTS)
 
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = from_addr
-            msg["To"] = ", ".join(self.smtp["recipients"])
+        # Build the email message once
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = from_addr
+        msg["To"] = ", ".join(self.smtp["recipients"])
 
-            # Plain text version
-            msg.attach(MIMEText(body_text, "plain"))
+        # Plain text version
+        msg.attach(MIMEText(body_text, "plain"))
 
-            # HTML version
-            html_body = self._text_to_html(subject, body_text)
-            msg.attach(MIMEText(html_body, "html"))
+        # HTML version
+        html_body = self._text_to_html(subject, body_text)
+        msg.attach(MIMEText(html_body, "html"))
 
-            with smtplib.SMTP(self.smtp["host"], self.smtp["port"], timeout=30) as server:
-                server.ehlo()
-                # Always attempt STARTTLS — most relays require it
+        # Try each host + port combination
+        for host in hosts:
+            for port in ports:
                 try:
-                    context = ssl.create_default_context()
-                    server.starttls(context=context)
-                    server.ehlo()
-                except smtplib.SMTPNotSupportedError:
-                    pass  # Server doesn't support TLS — continue without it
-                # Only login if credentials are provided
-                if requires_auth:
-                    server.login(user, password)
-                server.sendmail(
-                    from_addr,
-                    self.smtp["recipients"],
-                    msg.as_string(),
-                )
+                    print(f"  [NOTIFIER] Trying SMTP: {host}:{port} ...")
+                    with smtplib.SMTP(host, port, timeout=15) as server:
+                        server.ehlo()
 
-            print(f"  [NOTIFIER] Email sent to {len(self.smtp['recipients'])} recipient(s).")
-            return True
+                        # Port 587 typically requires STARTTLS
+                        # Port 25 internal relays usually don't support TLS
+                        if port == 587:
+                            try:
+                                context = ssl.create_default_context()
+                                server.starttls(context=context)
+                                server.ehlo()
+                            except (smtplib.SMTPNotSupportedError, smtplib.SMTPException):
+                                print(f"  [NOTIFIER] STARTTLS not supported on {host}:{port}, continuing without TLS.")
+                        # For port 25, skip TLS entirely (corporate relay)
 
-        except (OSError, smtplib.SMTPException) as e:
-            print(f"  [NOTIFIER] SMTP unreachable ({e.__class__.__name__}).")
-            return False
+                        # Only login if credentials are provided
+                        if requires_auth:
+                            server.login(user, password)
+
+                        server.sendmail(
+                            from_addr,
+                            self.smtp["recipients"],
+                            msg.as_string(),
+                        )
+
+                    recipient_count = len(self.smtp["recipients"])
+                    print(f"  [NOTIFIER] Email sent successfully via {host}:{port} to {recipient_count} recipient(s).")
+                    return True
+
+                except (OSError, smtplib.SMTPException) as e:
+                    print(f"  [NOTIFIER] SMTP failed on {host}:{port} — {e.__class__.__name__}: {e}")
+                    continue
+
+        # All host+port combinations failed
+        print(f"  [NOTIFIER] All SMTP hosts unreachable. Tried: {', '.join(f'{h}:{p}' for h in hosts for p in ports)}")
+        return False
 
     def _save_email_locally(self, subject, body_text, from_addr):
         """
