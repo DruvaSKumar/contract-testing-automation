@@ -32,11 +32,15 @@
 #     SMTP_PASSWORD      — (Optional) SMTP password — not needed for corp relay
 #     NOTIFY_EMAILS      — Comma-separated recipient email addresses
 #
-#   PRIMARY METHOD: GitLab Issue Notes (posts comment → GitLab emails subscribers)
-#     - Auto-subscribes the GITLAB_TOKEN owner to the notification issue
+#   PRIMARY METHOD: GitLab Issue Notes (posts comment → GitLab emails @mentioned users)
+#     - @mentions the token owner (or GITLAB_MENTION_USERS) in every note
+#     - GitLab ALWAYS emails @mentioned users regardless of settings
 #     - Works from any CI runner (cloud or self-hosted)
 #   SECONDARY: Direct SMTP via corporate relay (for self-hosted runners)
 #   LAST RESORT: Save email locally for verification
+#
+#   GITLAB_MENTION_USERS — Comma-separated GitLab usernames to @mention
+#                          (default: auto-detected from GITLAB_TOKEN)
 # ============================================================
 
 import json
@@ -84,6 +88,13 @@ class Notifier:
         self.gitlab_project_id = os.environ.get("CI_PROJECT_ID")
         self.gitlab_commit_sha = os.environ.get("CI_COMMIT_SHA")
         self.gitlab_api_url = os.environ.get("CI_API_V4_URL", "https://gitlab.com/api/v4")
+
+        # GitLab users to @mention in every note (guarantees email delivery)
+        mention_env = os.environ.get("GITLAB_MENTION_USERS", "")
+        self.gitlab_mention_users = [
+            u.strip() for u in mention_env.split(",") if u.strip()
+        ]
+        self._gitlab_username_resolved = False
 
         # SMTP config — primary email delivery via corporate relay
         if smtp_config:
@@ -471,20 +482,61 @@ class Notifier:
         except requests.RequestException:
             pass  # Non-critical — don't block notification
 
+    def _resolve_gitlab_username(self):
+        """
+        Resolves the GitLab username from the GITLAB_TOKEN via GET /user.
+        Called once, result is cached. If GITLAB_MENTION_USERS is already
+        set, this is skipped.
+        """
+        if self._gitlab_username_resolved or self.gitlab_mention_users:
+            return
+        self._gitlab_username_resolved = True
+
+        if not self.gitlab_token:
+            return
+
+        try:
+            headers = {"PRIVATE-TOKEN": self.gitlab_token}
+            resp = requests.get(
+                f"{self.gitlab_api_url}/user",
+                headers=headers,
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                username = resp.json().get("username")
+                if username:
+                    self.gitlab_mention_users = [username]
+                    print(f"  [NOTIFIER] Resolved GitLab user: @{username}")
+            else:
+                print(f"  [NOTIFIER] Could not resolve GitLab user (status {resp.status_code}).")
+        except requests.RequestException:
+            pass
+
+    def _build_mention_line(self):
+        """
+        Builds a Markdown @mention line for all configured users.
+        @mentioning in a GitLab note GUARANTEES email delivery
+        regardless of subscription or notification settings.
+        """
+        if not self.gitlab_mention_users:
+            return ""
+        mentions = " ".join(f"@{u}" for u in self.gitlab_mention_users)
+        return f"\n\n/cc {mentions}"
+
     def _send_gitlab_note(self, subject, body_text):
         """
         Posts a note (comment) on the dedicated notification issue.
-        GitLab emails all subscribers from gitlab@mg.gitlab.com.
-
-        This is MORE reliable than commit comments because:
-        - Issue note notifications go to ALL subscribers
-        - Commit comments only notify the commit author + @mentioned
+        @mentions configured users to guarantee email delivery from
+        gitlab@mg.gitlab.com — works regardless of subscription status.
         """
         if not all([self.gitlab_token, self.gitlab_project_id]):
             print("  [NOTIFIER] GitLab API not configured (missing GITLAB_TOKEN/CI_PROJECT_ID).")
             return False
 
         headers = {"PRIVATE-TOKEN": self.gitlab_token}
+
+        # Resolve the token owner's username (first call only)
+        self._resolve_gitlab_username()
 
         # Get or create the notification issue
         issue_iid = self._get_or_create_notification_issue()
@@ -503,6 +555,9 @@ class Notifier:
         pipeline_link = f"[Pipeline]({pipeline_url})" if pipeline_url else ""
         commit_link = f"`{commit_sha[:8]}`" if commit_sha != "unknown" else ""
 
+        # @mention users to guarantee email delivery
+        mention_line = self._build_mention_line()
+
         note_body = (
             f"## {subject}\n\n"
             f"**Commit:** {commit_link} | {pipeline_link}\n\n"
@@ -510,6 +565,7 @@ class Notifier:
             f"---\n"
             f"_Posted automatically by Contract Testing AI Agent — "
             f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}_"
+            f"{mention_line}"
         )
 
         try:
