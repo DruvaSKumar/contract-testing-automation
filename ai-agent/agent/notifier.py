@@ -32,8 +32,10 @@
 #     SMTP_PASSWORD      — (Optional) SMTP password — not needed for corp relay
 #     NOTIFY_EMAILS      — Comma-separated recipient email addresses
 #
-#   PRIMARY METHOD: Direct SMTP via corporate relay (no auth needed)
-#   SECONDARY: GitLab Issue Notes (subscribers get emails from gitlab@mg.gitlab.com)
+#   PRIMARY METHOD: GitLab Issue Notes (posts comment → GitLab emails subscribers)
+#     - Auto-subscribes the GITLAB_TOKEN owner to the notification issue
+#     - Works from any CI runner (cloud or self-hosted)
+#   SECONDARY: Direct SMTP via corporate relay (for self-hosted runners)
 #   LAST RESORT: Save email locally for verification
 # ============================================================
 
@@ -389,12 +391,15 @@ class Notifier:
     def _get_or_create_notification_issue(self):
         """
         Finds or creates a dedicated 'Contract Testing Notifications' issue.
+        Auto-subscribes the token owner so they receive email notifications.
         Returns the issue IID (internal ID) or None on failure.
         """
         headers = {"PRIVATE-TOKEN": self.gitlab_token}
         base_url = f"{self.gitlab_api_url}/projects/{self.gitlab_project_id}"
         label = "contract-notifications"
         title = "Contract Testing — Automated Notifications"
+
+        issue_iid = None
 
         # Search for existing open notification issue
         try:
@@ -403,38 +408,68 @@ class Notifier:
             resp = requests.get(search_url, headers=headers, params=params, timeout=10)
             if resp.status_code == 200 and resp.json():
                 issue = resp.json()[0]
-                return issue["iid"]
+                issue_iid = issue["iid"]
         except requests.RequestException:
             pass
 
-        # Create a new notification issue
-        try:
-            create_url = f"{base_url}/issues"
-            body = {
-                "title": title,
-                "description": (
-                    "This issue receives automated notifications from the "
-                    "Contract Testing AI Agent.\n\n"
-                    "**Subscribe to this issue** to receive email notifications "
-                    "for contract drift, test failures, and health reports.\n\n"
-                    "Each pipeline run posts a comment here with the results.\n\n"
-                    "_Do not close this issue — it is used for ongoing notifications._"
-                ),
-                "labels": label,
-            }
-            resp = requests.post(
-                create_url, headers=headers, json=body, timeout=15
-            )
-            if resp.status_code in (200, 201):
-                issue = resp.json()
-                print(f"  [NOTIFIER] Created notification issue #{issue['iid']}: {issue['web_url']}")
-                return issue["iid"]
-            else:
-                print(f"  [NOTIFIER] Failed to create issue: {resp.status_code} — {resp.text[:200]}")
+        # Create a new notification issue if none exists
+        if not issue_iid:
+            try:
+                create_url = f"{base_url}/issues"
+                body = {
+                    "title": title,
+                    "description": (
+                        "This issue receives automated notifications from the "
+                        "Contract Testing AI Agent.\n\n"
+                        "**Subscribe to this issue** to receive email notifications "
+                        "for contract drift, test failures, and health reports.\n\n"
+                        "Each pipeline run posts a comment here with the results.\n\n"
+                        "_Do not close this issue — it is used for ongoing notifications._"
+                    ),
+                    "labels": label,
+                }
+                resp = requests.post(
+                    create_url, headers=headers, json=body, timeout=15
+                )
+                if resp.status_code in (200, 201):
+                    issue = resp.json()
+                    issue_iid = issue["iid"]
+                    print(f"  [NOTIFIER] Created notification issue #{issue_iid}: {issue['web_url']}")
+                else:
+                    print(f"  [NOTIFIER] Failed to create issue: {resp.status_code} — {resp.text[:200]}")
+                    return None
+            except requests.RequestException as e:
+                print(f"  [NOTIFIER] Error creating issue: {e}")
                 return None
-        except requests.RequestException as e:
-            print(f"  [NOTIFIER] Error creating issue: {e}")
-            return None
+
+        # Auto-subscribe the token owner to the issue so they get emails
+        if issue_iid:
+            self._subscribe_to_issue(issue_iid)
+
+        return issue_iid
+
+    def _subscribe_to_issue(self, issue_iid):
+        """
+        Subscribes the GITLAB_TOKEN owner to the notification issue.
+        GitLab sends email notifications to all subscribers when a new
+        note (comment) is posted. This is idempotent — subscribing
+        when already subscribed returns 304 (no error).
+        """
+        headers = {"PRIVATE-TOKEN": self.gitlab_token}
+        url = (
+            f"{self.gitlab_api_url}/projects/{self.gitlab_project_id}"
+            f"/issues/{issue_iid}/subscribe"
+        )
+        try:
+            resp = requests.post(url, headers=headers, timeout=10)
+            if resp.status_code in (200, 201):
+                print(f"  [NOTIFIER] Subscribed to notification issue #{issue_iid}.")
+            elif resp.status_code == 304:
+                pass  # Already subscribed — no action needed
+            else:
+                print(f"  [NOTIFIER] Subscribe warning: {resp.status_code} — {resp.text[:100]}")
+        except requests.RequestException:
+            pass  # Non-critical — don't block notification
 
     def _send_gitlab_note(self, subject, body_text):
         """
@@ -485,7 +520,14 @@ class Notifier:
                 timeout=15,
             )
             if resp.status_code in (200, 201):
+                note_data = resp.json()
+                issue_url = (
+                    f"{self.gitlab_api_url.replace('/api/v4', '')}"
+                    f"/{os.environ.get('CI_PROJECT_PATH', '')}"
+                    f"/-/issues/{issue_iid}"
+                )
                 print(f"  [NOTIFIER] Posted to notification issue #{issue_iid} — GitLab will email subscribers.")
+                print(f"  [NOTIFIER] Issue URL: {issue_url}")
                 return True
             else:
                 print(f"  [NOTIFIER] GitLab API failed: {resp.status_code} — {resp.text[:200]}")
@@ -496,22 +538,23 @@ class Notifier:
 
     def _send_notification(self, subject, body_text):
         """
-        Unified notification delivery — tries SMTP first (corporate relay),
-        then GitLab issue notes, then local file as last resort.
+        Unified notification delivery:
+          1. GitLab Issue Notes (primary — works from any CI runner)
+          2. SMTP corporate relay (secondary — only works from corp network)
+          3. Local file (last resort — for dev/testing)
         """
-        # 1. Primary: direct SMTP via corporate relay
+        sent = False
+
+        # 1. Primary: GitLab issue note → auto-subscribes + emails subscribers
+        if self._send_gitlab_note(subject, body_text):
+            sent = True
+
+        # 2. Also try SMTP (supplementary — works from self-hosted runners)
         if self.smtp and self.smtp.get("recipients"):
             if self._send_email(subject, body_text):
-                # Also try GitLab note as supplementary (non-blocking)
-                if self.gitlab_token and self.gitlab_project_id:
-                    try:
-                        self._send_gitlab_note(subject, body_text)
-                    except Exception:
-                        pass
-                return True
+                sent = True
 
-        # 2. Fallback: GitLab issue note (triggers email from gitlab@mg.gitlab.com)
-        if self._send_gitlab_note(subject, body_text):
+        if sent:
             return True
 
         # 3. Last resort: save locally
