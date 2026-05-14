@@ -3,7 +3,7 @@
 # ============================================================
 # PURPOSE:
 #   Sends team notifications when contract tests fail or drift
-#   is detected. Supports Slack webhooks and email (SMTP).
+#   is detected. Supports Microsoft Teams, Slack, GitLab, and SMTP.
 #
 # WHY IS THIS NEEDED?
 #   When contract tests fail in CI, the team needs to know
@@ -14,33 +14,29 @@
 # HOW IT WORKS:
 #   1. Reads drift/test results (from DriftDetector or CI artifacts)
 #   2. Formats a notification message with key details
-#   3. Sends via Slack webhook and/or email depending on config
+#   3. Sends via Teams/Slack/GitLab/SMTP depending on config
 #
 # CONFIGURATION (environment variables):
+#   Microsoft Teams (PRIMARY — most reliable):
+#     TEAMS_WEBHOOK_URL  — Teams Incoming Webhook URL (from Workflows)
 #   Slack:
 #     SLACK_WEBHOOK_URL  — Incoming webhook URL from Slack app
-#   Email (via GitLab Issue Notes — GitLab emails subscribers automatically):
+#   GitLab Issue Notes:
 #     GITLAB_TOKEN       — GitLab Personal Access Token (api scope)
 #     CI_PROJECT_ID      — GitLab project ID (auto-set in CI)
-#     CI_COMMIT_SHA      — Commit SHA for context (auto-set in CI)
-#   Email (direct SMTP — primary delivery method):
-#     SMTP_HOST          — Comma-separated SMTP hostnames (fallback order)
-#                          Default: inf-npr1-smtp01.saas-n.com,inf-ny2-nonprod-smtplb02.dmz.saas-n.com
-#     SMTP_PORT          — Comma-separated ports to try (default: 25,587)
+#     GITLAB_MENTION_USERS — Comma-separated GitLab usernames to @mention
+#   SMTP (corporate relay — only works from internal network):
+#     SMTP_HOST          — Comma-separated SMTP hostnames
+#     SMTP_PORT          — Comma-separated ports (default: 25,587)
 #     SMTP_FROM          — Sender address (default: noreply@btbpo.net)
-#     SMTP_USER          — (Optional) SMTP username — not needed for corp relay
-#     SMTP_PASSWORD      — (Optional) SMTP password — not needed for corp relay
 #     NOTIFY_EMAILS      — Comma-separated recipient email addresses
 #
-#   PRIMARY METHOD: GitLab Issue Notes (posts comment → GitLab emails @mentioned users)
-#     - @mentions the token owner (or GITLAB_MENTION_USERS) in every note
-#     - GitLab ALWAYS emails @mentioned users regardless of settings
-#     - Works from any CI runner (cloud or self-hosted)
-#   SECONDARY: Direct SMTP via corporate relay (for self-hosted runners)
-#   LAST RESORT: Save email locally for verification
-#
-#   GITLAB_MENTION_USERS — Comma-separated GitLab usernames to @mention
-#                          (default: auto-detected from GITLAB_TOKEN)
+# DELIVERY ORDER:
+#   1. Microsoft Teams webhook (works from any CI runner)
+#   2. GitLab Issue Notes (@mentions guarantee email)
+#   3. Slack webhook
+#   4. Direct SMTP (only from corporate network)
+#   5. Local file (last resort)
 # ============================================================
 
 import json
@@ -72,15 +68,16 @@ class Notifier:
     via Slack webhooks and/or email.
     """
 
-    def __init__(self, slack_webhook_url=None, smtp_config=None):
+    def __init__(self, slack_webhook_url=None, smtp_config=None, teams_webhook_url=None):
         """
         Args:
-            slack_webhook_url: Slack incoming webhook URL.
-                               Defaults to SLACK_WEBHOOK_URL env var.
-            smtp_config:       Dict with keys: hosts, ports, from_addr, user, password, recipients.
-                               Defaults to corporate SMTP relays (no auth needed).
-                               SMTP is the primary delivery method.
+            slack_webhook_url:  Slack incoming webhook URL.
+            smtp_config:        Dict with SMTP config.
+            teams_webhook_url:  Microsoft Teams incoming webhook URL.
         """
+        # Microsoft Teams webhook (PRIMARY — most reliable from cloud CI)
+        self.teams_webhook_url = teams_webhook_url or os.environ.get("TEAMS_WEBHOOK_URL")
+
         self.slack_webhook_url = slack_webhook_url or os.environ.get("SLACK_WEBHOOK_URL")
 
         # GitLab API config (primary email method — GitLab sends emails from gitlab@mg.gitlab.com)
@@ -260,6 +257,114 @@ class Notifier:
         else:
             # Send summary report (HEALTHY confirmation)
             return self.notify_report(drift_results, command_name, pipeline_url)
+
+    # ----------------------------------------------------------------
+    # Microsoft Teams (PRIMARY notification method)
+    # ----------------------------------------------------------------
+
+    def _send_teams(self, subject, body_text, pipeline_url=None):
+        """
+        Sends a notification to Microsoft Teams via Incoming Webhook.
+        Uses Adaptive Card format (works with both legacy connectors
+        and the new Workflows-based webhooks).
+        """
+        if not self.teams_webhook_url:
+            return False
+
+        # Build Adaptive Card payload
+        card = self._build_teams_adaptive_card(subject, body_text, pipeline_url)
+
+        try:
+            resp = requests.post(
+                self.teams_webhook_url,
+                json=card,
+                headers={"Content-Type": "application/json"},
+                timeout=15,
+            )
+            # Teams webhooks return 200 or 202 on success
+            if resp.status_code in (200, 202):
+                print("  [NOTIFIER] Teams notification sent successfully.")
+                return True
+            else:
+                print(f"  [NOTIFIER] Teams failed: {resp.status_code} — {resp.text[:200]}")
+                return False
+        except requests.RequestException as e:
+            print(f"  [NOTIFIER] Teams error: {e}")
+            return False
+
+    def _build_teams_adaptive_card(self, subject, body_text, pipeline_url=None):
+        """
+        Builds a Microsoft Teams Adaptive Card payload.
+        Compatible with both Workflows webhooks and legacy Office 365 connectors.
+        """
+        # Determine color based on subject content
+        if "CRITICAL" in subject or "FAILURE" in subject:
+            color = "attention"  # Red
+        elif "WARNING" in subject:
+            color = "warning"   # Yellow
+        else:
+            color = "good"      # Green
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+        # Truncate body for Teams (max ~28KB per card)
+        display_body = body_text[:3000]
+        if len(body_text) > 3000:
+            display_body += "\n... (truncated)"
+
+        # Build card body elements
+        card_body = [
+            {
+                "type": "TextBlock",
+                "text": subject,
+                "weight": "Bolder",
+                "size": "Medium",
+                "color": color,
+                "wrap": True,
+            },
+            {
+                "type": "TextBlock",
+                "text": display_body,
+                "wrap": True,
+                "fontType": "Monospace",
+                "size": "Small",
+            },
+            {
+                "type": "TextBlock",
+                "text": f"Contract Testing AI Agent • {timestamp}",
+                "isSubtle": True,
+                "size": "Small",
+                "wrap": True,
+            },
+        ]
+
+        # Add pipeline button if URL available
+        actions = []
+        if pipeline_url:
+            actions.append({
+                "type": "Action.OpenUrl",
+                "title": "View Pipeline",
+                "url": pipeline_url,
+            })
+
+        card = {
+            "type": "message",
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "contentUrl": None,
+                    "content": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.4",
+                        "body": card_body,
+                        "actions": actions,
+                    },
+                }
+            ],
+        }
+
+        return card
 
     # ----------------------------------------------------------------
     # Slack
@@ -594,18 +699,31 @@ class Notifier:
 
     def _send_notification(self, subject, body_text):
         """
-        Unified notification delivery:
-          1. GitLab Issue Notes (primary — works from any CI runner)
-          2. SMTP corporate relay (secondary — only works from corp network)
-          3. Local file (last resort — for dev/testing)
+        Unified notification delivery (tries each method in order):
+          1. Microsoft Teams webhook (primary — works from any CI runner)
+          2. GitLab Issue Notes (@mention → guaranteed email)
+          3. Slack webhook
+          4. SMTP corporate relay (only from corp network)
+          5. Local file (last resort)
         """
         sent = False
+        pipeline_url = os.environ.get("CI_PIPELINE_URL", "")
 
-        # 1. Primary: GitLab issue note → auto-subscribes + emails subscribers
-        if self._send_gitlab_note(subject, body_text):
-            sent = True
+        # 1. Microsoft Teams (primary — most reliable)
+        if self.teams_webhook_url:
+            if self._send_teams(subject, body_text, pipeline_url):
+                sent = True
 
-        # 2. Also try SMTP (supplementary — works from self-hosted runners)
+        # 2. GitLab issue note (supplementary — also creates audit trail)
+        if self.gitlab_token and self.gitlab_project_id:
+            if self._send_gitlab_note(subject, body_text):
+                sent = True
+
+        # 3. Slack (supplementary)
+        # Note: Slack is also tried in the public API methods with rich formatting,
+        # but we try plain notification here as fallback if not sent yet
+
+        # 4. SMTP (supplementary — only works from self-hosted runners)
         if self.smtp and self.smtp.get("recipients"):
             if self._send_email(subject, body_text):
                 sent = True
@@ -613,7 +731,7 @@ class Notifier:
         if sent:
             return True
 
-        # 3. Last resort: save locally
+        # 5. Last resort: save locally
         from_addr = (self.smtp or {}).get("from_addr", DEFAULT_SMTP_FROM)
         return self._save_email_locally(subject, body_text, from_addr)
 
