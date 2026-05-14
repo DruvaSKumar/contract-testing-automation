@@ -317,8 +317,15 @@ notify-team:
     - cd $CI_PROJECT_DIR/ai-agent
     - . .venv/bin/activate
     - python3 main.py --notify --save-report --pipeline-url "$CI_PIPELINE_URL" report
+    # Generate static dashboard snapshot (browsable artifact)
+    - python3 dashboard.py --export
     # Cleanup
     - kill $PROVIDER_PID 2>/dev/null || true
+  artifacts:
+    paths:
+      - ai-agent/reports/
+    expire_in: 30 days
+    when: always
   allow_failure: true
 
 

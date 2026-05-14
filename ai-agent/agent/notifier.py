@@ -296,6 +296,7 @@ class Notifier:
         """
         Builds a Microsoft Teams Adaptive Card payload.
         Compatible with both Workflows webhooks and legacy Office 365 connectors.
+        Includes buttons for Pipeline, Dashboard, and Report artifacts.
         """
         # Determine color based on subject content
         if "CRITICAL" in subject or "FAILURE" in subject:
@@ -338,7 +339,7 @@ class Notifier:
             },
         ]
 
-        # Add pipeline button if URL available
+        # Build action buttons
         actions = []
         if pipeline_url:
             actions.append({
@@ -346,6 +347,26 @@ class Notifier:
                 "title": "View Pipeline",
                 "url": pipeline_url,
             })
+
+            # Build artifact URLs from pipeline URL
+            # GitLab pipeline URL: .../pipelines/12345
+            # Job browse URL: .../-/jobs/<id>/artifacts/browse (we use the job artifacts path)
+            project_path = os.environ.get("CI_PROJECT_PATH", "")
+            job_id = os.environ.get("CI_JOB_ID", "")
+            gitlab_base = os.environ.get("CI_SERVER_URL", "https://gitlab.com")
+
+            if project_path and job_id:
+                artifacts_base = f"{gitlab_base}/{project_path}/-/jobs/{job_id}/artifacts/file"
+                actions.append({
+                    "type": "Action.OpenUrl",
+                    "title": "View Dashboard",
+                    "url": f"{artifacts_base}/ai-agent/reports/dashboard.html",
+                })
+                actions.append({
+                    "type": "Action.OpenUrl",
+                    "title": "View Report",
+                    "url": f"{artifacts_base}/ai-agent/reports/full_report.txt",
+                })
 
         card = {
             "type": "message",

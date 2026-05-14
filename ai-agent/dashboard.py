@@ -146,9 +146,46 @@ def api_history():
     return jsonify(load_history())
 
 
+def export_static_html(output_path=None):
+    """
+    Generates a static HTML snapshot of the dashboard.
+    Used in CI to produce a browsable artifact without a running server.
+
+    Args:
+        output_path: File path to write. Defaults to reports/dashboard.html.
+
+    Returns:
+        str: Path to the generated HTML file.
+    """
+    if output_path is None:
+        output_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "reports", "dashboard.html",
+        )
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    with app.app_context():
+        result = run_health_check()
+        history = load_history()
+        html = render_template("dashboard.html", result=result, history=history)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    print(f"  [DASHBOARD] Static snapshot saved to: {output_path}")
+    return output_path
+
+
 # ---- Entry Point ----
 
 if __name__ == "__main__":
+    # Check for --export flag to generate static HTML
+    if len(sys.argv) > 1 and sys.argv[1] == "--export":
+        path = sys.argv[2] if len(sys.argv) > 2 else None
+        export_static_html(path)
+        sys.exit(0)
+
     port = int(os.environ.get("DASHBOARD_PORT", 5050))
     print(f"\n{'=' * 60}")
     print(f"  Contract Health Dashboard")
