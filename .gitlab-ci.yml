@@ -262,24 +262,22 @@ contract-report:
 # ============================================================
 # JOB: AI Agent — Team Notifications
 # ============================================================
-# Sends Slack and/or email notifications with a summary of
+# Sends Teams/Slack/email notifications with a summary of
 # contract test results. Runs ALWAYS so the developer gets
-# an email after every pipeline — pass or fail.
+# notified after every pipeline — pass or fail.
 #
 # Individual jobs (drift-check, auto-fix) also auto-notify
 # via the --notify flag, but this job provides a final
 # consolidated notification after all results are in.
 #
 # Prerequisites (CI/CD Variables in GitLab):
-#   SLACK_WEBHOOK_URL — Slack incoming webhook URL
-#   SMTP_HOST         — SMTP relay servers, comma-separated (fallback order)
-#                        Default: inf-npr1-smtp01.saas-n.com,inf-ny2-nonprod-smtplb02.dmz.saas-n.com
-#   SMTP_FROM         — Sender address (default: noreply@btbpo.net)
-#   NOTIFY_EMAILS     — Comma-separated recipients
-#                        (default: Druva.SKumar@bottomline.com)
+#   TEAMS_WEBHOOK_URL — Microsoft Teams Incoming Webhook URL (PRIMARY)
+#   SLACK_WEBHOOK_URL — Slack incoming webhook URL (optional)
+#   GITLAB_TOKEN      — For GitLab issue note notifications (optional)
+#   SMTP_HOST         — SMTP relay servers (optional, corp network only)
+#   NOTIFY_EMAILS     — Comma-separated recipients for SMTP
 #
-#   No password needed — uses unauthenticated corporate relay.
-#   Only set SMTP_USER + SMTP_PASSWORD if the relay requires auth.
+# Delivery order: Teams → GitLab Notes → Slack → SMTP → local file
 # ============================================================
 notify-team:
   stage: report
