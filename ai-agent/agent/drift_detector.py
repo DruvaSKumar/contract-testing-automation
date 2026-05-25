@@ -197,7 +197,7 @@ class DriftDetector:
 
         # Build summary
         total_spec = len(spec_lookup)
-        total_contracts = len(contract_lookup)
+        total_contracts = sum(len(v) for v in contract_lookup.values())
         # Coverage = endpoints with ALL contracts passing (no drift)
         # Drifted endpoints are NOT counted as covered
         summary = {
