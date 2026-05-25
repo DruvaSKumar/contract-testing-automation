@@ -223,6 +223,7 @@ backward-compat-check:
   needs:
     - job: generate-contracts
       artifacts: true
+      optional: true
   rules:
     - if: $CI_MERGE_REQUEST_IID
   before_script:
