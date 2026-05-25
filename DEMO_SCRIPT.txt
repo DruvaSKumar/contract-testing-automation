@@ -138,37 +138,50 @@ Spring Cloud Contract reads these YAML files and does two things:
 
 SAY:
 "Fourth — and this is where it gets interesting — the AI Agent.
-It's a Python tool with 7 internal modules:
+It's a Python tool with 12 internal modules:
 
 1. spec_reader — fetches the OpenAPI spec from the running Provider
 2. contract_generator — converts endpoints into SCC YAML contracts
-3. drift_detector — compares existing contracts vs current API
-4. report_generator — produces health reports with coverage metrics
-5. ci_config_generator — generates the entire GitLab CI pipeline
-6. notifier — sends Slack + GitLab Issue Notes when things break
-7. mr_creator — auto-creates Merge Requests with fixed contracts
+3. negative_contract_generator — generates error scenario contracts (400, 404)
+4. drift_detector — compares existing contracts vs current API
+5. coverage_tracker — tracks coverage metrics and trends over time
+6. report_generator — produces health reports with coverage metrics
+7. root_cause_analyzer — AI explains WHAT failed, WHY, and HOW to fix
+8. backward_compatibility — detects breaking changes vs main branch
+9. ci_config_generator — generates the entire GitLab CI pipeline
+10. notifier — sends Teams, Slack, GitLab, and SMTP notifications
+11. mr_creator — auto-creates Merge Requests with fixed contracts
+12. mr_validator — posts validation summary on merge requests
 
 You run it with simple CLI commands:
   python main.py generate   → creates contract files
+  python main.py generate --negative → creates error scenario contracts
   python main.py drift      → finds mismatches
   python main.py report     → health report
-  python main.py validate   → CI exit codes (0=pass, 2=fail)"
+  python main.py validate   → CI exit codes (0=pass, 2=fail)
+  python main.py analyze    → root cause analysis on failures
+  python main.py compat     → backward compatibility check
+  python main.py dashboard  → starts the web dashboard on port 5050"
 
 --- COMPONENT 5: CI/CD Pipeline ---
 
 SAY:
-"Finally, the GitLab CI pipeline — 9 jobs across 5 stages:
+"Finally, the GitLab CI pipeline — 13 jobs across 5 stages:
 
-Stage 1 BUILD:  Compile both services
-Stage 2 TEST:   Run contract tests + drift detection
-Stage 3 REPORT: Summarize results + send notifications
+Stage 1 BUILD:  Compile both services + AI-generate contracts from spec
+Stage 2 TEST:   Drift detection + backward compat + contract tests
+Stage 3 REPORT: Summary + Teams/Slack notifications + RCA + MR comment
 Stage 4 FIX:    Manual trigger — regenerate contracts + create MR
 Stage 5 DEPLOY: Only runs if ALL tests pass, only on main branch
 
-Key feature: if a contract test fails, deployment is BLOCKED.
-The team gets notified via Slack and email (GitLab Issue Notes).
-And there's a one-click auto-fix that regenerates contracts and
-opens a Merge Request for review."
+Key features:
+- If a contract test fails, deployment is BLOCKED.
+- The team gets notified via Microsoft Teams, Slack, and email.
+- On MRs, a backward compatibility checker blocks breaking changes.
+- On failures, root cause analysis explains exactly what went wrong.
+- A formatted validation summary is posted as a comment on the MR.
+- And there's a one-click auto-fix that regenerates contracts and
+  opens a Merge Request for review."
 
 
 ================================================================================
@@ -207,11 +220,11 @@ RUN (stop Provider first, or use new terminal):
   cd provider-api
   mvn clean test
 
-[Show output — should see "Tests run: 6, Failures: 0"]
+[Show output — should see "Tests run: 15, Failures: 0"]
 
-SAY: "6 tests pass — 5 auto-generated from contracts, 1 smoke test.
-Spring Cloud Contract read those 5 YAML files and verified the real API
-matches every single contract."
+SAY: "15 tests pass — 12 contract tests (5 positive + 7 negative scenarios)
+plus smoke tests. Spring Cloud Contract read those 12 YAML files and verified
+the real API matches every single contract — including error handling."
 
 RUN:
   cd ../consumer-api
@@ -267,7 +280,9 @@ RUN (in ai-agent directory):
   python main.py drift
 
 SAY: "Drift detector shows all contracts are in sync — 100% coverage,
-no orphaned contracts, no schema drift. Health status: HEALTHY."
+no orphaned contracts, no schema drift. Health status: HEALTHY.
+It tracked 12 total contract files covering all 5 endpoints
+with both positive and negative scenarios."
 
 RUN:
   python main.py report
@@ -319,13 +334,18 @@ SAY:
 [Show these metrics — on screen or from memory]
 
 METRICS:
-  • 100% API coverage — all 5 endpoints have contracts
-  • 8 total tests passing (6 provider + 2 consumer)
-  • 9 CI/CD jobs across 5 stages — fully automated
-  • AI Agent with 7 tools — generates, detects, reports, notifies, fixes
+  • 100% API coverage — all 5 endpoints have positive AND negative contracts
+  • 12 contract YAML files (5 positive + 7 negative error scenarios)
+  • 15 provider tests + 2 consumer tests = 17 total tests passing
+  • 13 CI/CD jobs across 5 stages — fully automated
+  • AI Agent with 12 modules — generates, detects, reports, analyzes, notifies, fixes
   • Breaking changes caught at build time — zero reach production
-  • Team notifications — Slack + email on any failure
+  • 4 notification channels — Teams + Slack + GitLab Notes + SMTP email
+  • AI Root Cause Analysis — automatic WHAT/WHY/HOW on failures
+  • Backward compatibility gate — blocks breaking MRs
+  • MR validation comment — formatted summary on every merge request
   • Auto-fix capability — one-click MR creation
+  • Live web dashboard — Flask UI on port 5050 with metrics & charts
 
 SAY:
 "The key takeaway: this shifts integration failure detection from
@@ -400,9 +420,10 @@ But the core system is complete and production-ready."
  Spring Cloud BOM: 2023.0.4
  API Docs:         springdoc-openapi 2.5.0 (OpenAPI 3.0)
  Build Tool:       Apache Maven 3.9.12
- AI Agent:         Python 3.14 + requests + PyYAML + Flask
- CI/CD:            GitLab CI (9 jobs, 5 stages)
- Notifications:    Slack Webhooks + GitLab Issue Notes (auto-email)
+ AI Agent:         Python 3.14 + requests + PyYAML + Flask (12 modules)
+ CI/CD:            GitLab CI (13 jobs, 5 stages)
+ Notifications:    Microsoft Teams (primary) + Slack + GitLab Notes + SMTP
+ Dashboard:        Flask web UI on port 5050 (live metrics, RCA, coverage)
  Version Control:  Git (GitHub mirror + GitLab primary)
 
 
@@ -429,9 +450,11 @@ A: Build + test + report takes about 3-4 minutes in GitLab CI. Maven caching
    makes subsequent runs faster.
 
 Q: "How does the notification work?"
-A: Two channels: Slack webhook (instant message) and GitLab Issue Notes.
-   For Issue Notes — the agent creates a dedicated issue, posts results as
-   comments. GitLab auto-emails all subscribers. Subscribe once, get all alerts.
+A: Four channels in priority order: Microsoft Teams webhook (primary,
+   adaptive card with metrics), GitLab Issue Notes (@mentions guarantee
+   email delivery), Slack webhook, and direct SMTP. Each channel is
+   independent — if one fails, the next is tried. The agent sends a single
+   consolidated notification per pipeline run with all results.
 
 Q: "What if the contract test gives a false positive?"
 A: Contracts use regex matchers for flexible validation — they check structure
@@ -446,7 +469,26 @@ A: Python is ideal for scripting, HTTP calls, and YAML manipulation.
 Q: "Is this production-ready?"
 A: The contract testing (Java/Spring Cloud Contract) and CI/CD pipeline are
    production-grade. The AI Agent is a developer tool — it generates files
-   that go through normal code review (MR) before merging.
+   that go through normal code review (MR) before merging. The backward
+   compatibility checker and root cause analyzer add enterprise-grade
+   safety that prevents breaking changes from reaching production.
+
+Q: "What about negative/error testing?"
+A: The AI Agent generates both positive (200/201/204) AND negative (400/404)
+   contracts. It tests that invalid requests return proper error responses
+   with the correct status codes and error message format. This catches
+   silent validation regressions that happy-path tests miss.
+
+Q: "How does the dashboard work?"
+A: It's a Flask web app on port 5050. It runs live Maven tests, shows
+   real-time coverage metrics, displays drift detection results, and shows
+   root cause analysis for any failures. In CI, it exports a static HTML
+   snapshot saved as a pipeline artifact.
+
+Q: "What's the backward compatibility checker?"
+A: On every MR, it compares the current API spec against the main branch
+   baseline. If you removed a field, changed a type, or deleted an endpoint,
+   it blocks the merge with a clear explanation of what would break consumers.
 
 
 ================================================================================
