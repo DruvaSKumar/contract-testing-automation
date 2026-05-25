@@ -1,0 +1,18 @@
+=================================================================
+  📊 CONTRACT COVERAGE METRICS & TRENDS
+=================================================================
+
+  Endpoint Coverage:   100.0% (5/5)
+  Positive Contracts:  5
+  Negative Contracts:  7 (77.8% of potential scenarios)
+  Total Contracts:     12
+  Contracts/Endpoint:  2.4
+  Combined Score:      91.1%
+
+  Error Scenario Breakdown:
+    HTTP 400 (Bad Request): 4 contract(s)
+    HTTP 404 (Not Found): 3 contract(s)
+
+  Trend: Not enough data points for trend analysis. Need at least 2 snapshots.
+
+=================================================================

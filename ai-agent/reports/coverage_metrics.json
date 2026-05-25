@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-05-21 09:27:22 UTC",
+  "endpoint_coverage": {
+    "total_endpoints": 5,
+    "covered_endpoints": 5,
+    "percentage": 100.0
+  },
+  "positive_contracts": {
+    "count": 5,
+    "endpoints_covered": 5
+  },
+  "negative_contracts": {
+    "count": 7,
+    "potential_scenarios": 9,
+    "percentage": 77.8,
+    "by_status": {
+      "400": 4,
+      "404": 3
+    }
+  },
+  "total_contracts": 12,
+  "combined_score": 91.1,
+  "contracts_per_endpoint": 2.4,
+  "negative_details": {
+    "GET /api/users/{id}": {
+      "endpoint": "GET /api/users/{id}",
+      "scenarios_covered": [
+        404
+      ]
+    },
+    "PUT /api/users/{id}": {
+      "endpoint": "PUT /api/users/{id}",
+      "scenarios_covered": [
+        400,
+        400,
+        404
+      ]
+    },
+    "DELETE /api/users/{id}": {
+      "endpoint": "DELETE /api/users/{id}",
+      "scenarios_covered": [
+        404
+      ]
+    },
+    "GET /api/users": {
+      "endpoint": "GET /api/users",
+      "scenarios_covered": []
+    },
+    "POST /api/users": {
+      "endpoint": "POST /api/users",
+      "scenarios_covered": [
+        400,
+        400
+      ]
+    }
+  }
+}

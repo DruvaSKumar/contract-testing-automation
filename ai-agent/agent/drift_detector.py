@@ -122,13 +122,16 @@ class DriftDetector:
         covered = []
 
         # Build a set of (METHOD, normalized_url_pattern) from contracts
+        # Multiple contracts can exist per endpoint (e.g. 200 + 404)
         contract_lookup = {}
         for contract_info in existing_contracts:
             key = self._normalize_endpoint_key(
                 contract_info["method"],
                 contract_info["url"]
             )
-            contract_lookup[key] = contract_info
+            if key not in contract_lookup:
+                contract_lookup[key] = []
+            contract_lookup[key].append(contract_info)
 
         # Build a set of (METHOD, url_pattern) from spec
         spec_lookup = {}
@@ -150,8 +153,10 @@ class DriftDetector:
                 })
 
         # --- Find ORPHANED contracts (contract exists but not in spec) ---
-        for key, contract_info in contract_lookup.items():
+        for key, contract_list in contract_lookup.items():
             if key not in spec_lookup:
+                # Use first contract as representative
+                contract_info = contract_list[0]
                 orphaned.append({
                     "method": contract_info["method"],
                     "url": contract_info["url"],
@@ -161,29 +166,40 @@ class DriftDetector:
                 })
 
         # --- Find DRIFTED contracts (both exist but schema mismatch) ---
+        # Check EVERY contract individually. An endpoint is "covered" only
+        # if ALL its contracts pass. Any single drifted contract is reported.
         for key in set(contract_lookup.keys()) & set(spec_lookup.keys()):
-            contract_info = contract_lookup[key]
+            contract_list = contract_lookup[key]
             endpoint = spec_lookup[key]
 
-            drift_issues = self._check_schema_drift(contract_info, endpoint)
-            if drift_issues:
-                drifted.append({
-                    "method": contract_info["method"],
-                    "url": contract_info["url"],
-                    "file": contract_info["file_name"],
-                    "file_path": contract_info["file_path"],
-                    "issues": drift_issues,
-                })
-            else:
+            endpoint_has_drift = False
+            for contract_info in contract_list:
+                drift_issues = self._check_schema_drift(contract_info, endpoint)
+                if drift_issues:
+                    endpoint_has_drift = True
+                    drifted.append({
+                        "method": contract_info["method"],
+                        "url": contract_info["url"],
+                        "file": contract_info["file_name"],
+                        "file_path": contract_info["file_path"],
+                        "issues": drift_issues,
+                        "suggestion": self._generate_drift_suggestion(drift_issues),
+                    })
+
+            if not endpoint_has_drift:
+                # Use first contract as representative for the covered list
+                rep = contract_list[0]
                 covered.append({
-                    "method": contract_info["method"],
-                    "url": contract_info["url"],
-                    "file": contract_info["file_name"],
+                    "method": rep["method"],
+                    "url": rep["url"],
+                    "file": rep["file_name"],
                 })
 
         # Build summary
         total_spec = len(spec_lookup)
         total_contracts = len(contract_lookup)
+        # Coverage = endpoints with ALL contracts passing (no drift)
+        # Drifted endpoints are NOT counted as covered
         summary = {
             "total_spec_endpoints": total_spec,
             "total_contracts": total_contracts,
@@ -209,24 +225,49 @@ class DriftDetector:
 
     def _check_schema_drift(self, contract_info, endpoint):
         """
-        Checks if a contract's response body fields match the current
-        API spec's response schema.
+        Checks if a contract's request AND response body fields match the
+        current API spec's schemas.
 
-        This compares the fields in the contract's response body against
-        the properties defined in the OpenAPI schema.
+        This compares:
+          1. Request body fields against the spec's request body schema
+          2. Response body fields against the spec's response schema
 
         Returns:
             list[str]: List of drift issue descriptions, or empty if no drift.
         """
         issues = []
         contract = contract_info["contract"]
+
+        # ---- Check REQUEST body drift ----
+        contract_request = contract.get("request", {})
+        contract_req_body = contract_request.get("body")
+        spec_request_schema = endpoint.get("request_body_schema")
+
+        if contract_req_body and spec_request_schema and isinstance(contract_req_body, dict):
+            spec_req_properties = spec_request_schema.get("properties", {})
+            if spec_req_properties:
+                req_contract_fields = set(contract_req_body.keys())
+                req_spec_fields = set(spec_req_properties.keys())
+
+                missing_in_req = req_spec_fields - req_contract_fields
+                for field in missing_in_req:
+                    # Only flag required fields missing from request
+                    required = spec_request_schema.get("required", [])
+                    if field in required:
+                        issues.append(f"Required request field '{field}' is in API spec but missing from contract")
+
+                extra_in_req = req_contract_fields - req_spec_fields
+                for field in extra_in_req:
+                    issues.append(f"Request field '{field}' is in contract but not in API spec")
+
+        # ---- Check RESPONSE body drift ----
         contract_response = contract.get("response", {})
         contract_body = contract_response.get("body")
 
         # Get the expected response schema from the spec
         responses = endpoint.get("responses", {})
 
-        # Find the matching success response
+        # Find the matching response by status code
         contract_status = str(contract_response.get("status", "200"))
         spec_response = responses.get(contract_status, {})
         spec_schema = spec_response.get("schema")
@@ -239,7 +280,7 @@ class DriftDetector:
             return issues
 
         if not contract_body:
-            # No body to compare — skip schema checks
+            # No body to compare — skip response schema checks
             return issues
 
         if not spec_schema:
@@ -313,6 +354,35 @@ class DriftDetector:
         """
         if uncovered == 0 and orphaned == 0 and drifted == 0:
             return "HEALTHY"
-        if drifted > 0 or uncovered > covered:
+        if drifted > 1 or uncovered > covered:
             return "CRITICAL"
         return "WARNING"
+
+    def _generate_drift_suggestion(self, issues):
+        """Generate a concise fix suggestion based on drift issues."""
+        if not issues:
+            return None
+
+        suggestions = []
+        for issue in issues:
+            issue_lower = issue.lower()
+            if "request field" in issue_lower and "not in api spec" in issue_lower:
+                field = issue.split("'")[1] if "'" in issue else "unknown"
+                suggestions.append(
+                    f"Remove '{field}' from contract request body or revert the rename in Provider"
+                )
+            elif "required request field" in issue_lower and "missing from contract" in issue_lower:
+                field = issue.split("'")[1] if "'" in issue else "unknown"
+                suggestions.append(f"Add required field '{field}' to contract request body")
+            elif "in api spec but missing from contract" in issue_lower:
+                field = issue.split("'")[1] if "'" in issue else "unknown"
+                suggestions.append(f"Add '{field}' to contract response or run: python main.py generate --overwrite")
+            elif "in contract but not in api spec" in issue_lower:
+                field = issue.split("'")[1] if "'" in issue else "unknown"
+                suggestions.append(f"Remove '{field}' from contract (field was removed from API)")
+            else:
+                suggestions.append("Regenerate contract: python main.py generate --overwrite")
+
+        # Deduplicate
+        unique = list(dict.fromkeys(suggestions))
+        return "; ".join(unique[:3])

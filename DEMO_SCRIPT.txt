@@ -1,0 +1,454 @@
+================================================================================
+ CONTRACT TESTING AUTOMATION WITH AI AGENTS — DEMO SCRIPT
+================================================================================
+ Author: Druva S Kumar
+ Date:   May 2026
+ Purpose: Guide for pitching, explaining, and live-demoing this project
+          to your manager in proper order and in the best way.
+================================================================================
+
+
+================================================================================
+ HOW TO USE THIS SCRIPT
+================================================================================
+
+This script is organized in 4 parts:
+  1. THE PITCH (2–3 minutes) — Why this project matters
+  2. THE EXPLANATION (5–7 minutes) — How it works technically
+  3. THE LIVE DEMO (8–10 minutes) — Hands-on proof
+  4. THE WRAP-UP (2–3 minutes) — Results, impact, and what's next
+
+Total time: ~20 minutes (can be shortened to 10 by skipping deep-dives)
+
+Preparation checklist before the demo:
+  [ ] Java 25 installed and JAVA_HOME set
+  [ ] Maven 3.9.12 available (mvn -version works)
+  [ ] Provider API compiles (cd provider-api && mvn clean compile)
+  [ ] Python 3.14 with venv activated (cd ai-agent && .venv\Scripts\activate)
+  [ ] Terminal(s) open and ready
+  [ ] GitLab repo open in browser (for CI pipeline screenshots)
+  [ ] VS Code open with the project loaded
+
+
+================================================================================
+ PART 1: THE PITCH — "Why This Matters" (2–3 minutes)
+================================================================================
+
+[START WITH THE PROBLEM — Relatable scenario]
+
+SAY:
+"Let me start with a real problem we face in microservices architecture.
+
+Imagine two teams working on related services:
+- Team A runs a User Service with a field called 'name'
+- Team B runs an Order Service that calls Team A's API and expects 'name'
+
+One day, Team A does a harmless refactor — renames 'name' to 'fullName'.
+Team A's own tests pass. They deploy. Everything looks fine.
+
+But Team B's service breaks in production. Silently. No one knows until
+customers start complaining.
+
+This is the #1 integration problem in microservices: services break each
+other without knowing."
+
+[PAUSE — let it sink in]
+
+SAY:
+"What if we could catch that breaking change at build time — automatically,
+in the CI pipeline, BEFORE anyone deploys anything?
+
+That's exactly what this project does."
+
+[TRANSITION TO SOLUTION]
+
+SAY:
+"I built an end-to-end contract testing automation system with three layers:
+
+1. CONTRACT TESTING — YAML files that define 'when consumer sends X,
+   provider MUST return Y'. If the provider breaks this contract,
+   the build fails. Deployment is blocked.
+
+2. AI AGENT — A Python tool that reads the API's OpenAPI specification
+   and automatically generates these contract files. It also detects
+   when contracts drift out of sync and sends team notifications.
+
+3. CI/CD PIPELINE — A GitLab pipeline with 9 jobs across 5 stages that
+   runs all of this automatically on every push. Breaking changes
+   never reach production."
+
+
+================================================================================
+ PART 2: THE EXPLANATION — "How It Works" (5–7 minutes)
+================================================================================
+
+[SHOW THE ARCHITECTURE — Use the diagram from PRESENTATION_CONTENT.md or draw on whiteboard]
+
+SAY:
+"Let me walk you through how the pieces fit together."
+
+--- COMPONENT 1: Provider API (User Service) ---
+
+SAY:
+"First, the Provider — this is a Spring Boot REST API running on port 8080.
+It's a User Management service with 5 endpoints: GET all users, GET by ID,
+POST create, PUT update, DELETE.
+
+Key thing: it auto-generates an OpenAPI specification at /v3/api-docs.
+This is the machine-readable description of the entire API — every endpoint,
+every field, every data type. The AI Agent reads this."
+
+Tech details (if asked):
+- Spring Boot 3.3.8, Java 25 (Oracle LTS)
+- springdoc-openapi 2.5.0 for auto-generating the spec
+- Jakarta Validation for request validation
+- In-memory store with 3 sample users
+
+--- COMPONENT 2: Consumer API (Order Service) ---
+
+SAY:
+"Second, the Consumer — an Order Service on port 8081. It calls the Provider
+to enrich orders with user information. When you fetch an order, it
+internally calls GET /api/users/{userId} on the Provider.
+
+This is the real dependency. If the Provider changes its response format,
+the Consumer breaks. The Consumer has a UserDTO class that maps to the
+Provider's response — this IS the contract dependency."
+
+--- COMPONENT 3: Contract Files (The Agreement) ---
+
+SAY:
+"Third, the contracts — 5 YAML files that define expected request/response
+pairs. For example:"
+
+[Show a contract file — should_return_user_by_id.yml]
+
+SAY:
+"This says: when you send GET /api/users/1, you MUST get back a 200
+response with id, name, email, and role fields. The matchers section
+uses regex to validate format without being brittle about exact values.
+
+Spring Cloud Contract reads these YAML files and does two things:
+1. On the PROVIDER side: auto-generates JUnit tests that call the real API
+   and verify it matches the contract
+2. On the CONSUMER side: generates WireMock stubs so the Consumer can test
+   without needing the real Provider running"
+
+--- COMPONENT 4: AI Agent (The Automation) ---
+
+SAY:
+"Fourth — and this is where it gets interesting — the AI Agent.
+It's a Python tool with 7 internal modules:
+
+1. spec_reader — fetches the OpenAPI spec from the running Provider
+2. contract_generator — converts endpoints into SCC YAML contracts
+3. drift_detector — compares existing contracts vs current API
+4. report_generator — produces health reports with coverage metrics
+5. ci_config_generator — generates the entire GitLab CI pipeline
+6. notifier — sends Slack + GitLab Issue Notes when things break
+7. mr_creator — auto-creates Merge Requests with fixed contracts
+
+You run it with simple CLI commands:
+  python main.py generate   → creates contract files
+  python main.py drift      → finds mismatches
+  python main.py report     → health report
+  python main.py validate   → CI exit codes (0=pass, 2=fail)"
+
+--- COMPONENT 5: CI/CD Pipeline ---
+
+SAY:
+"Finally, the GitLab CI pipeline — 9 jobs across 5 stages:
+
+Stage 1 BUILD:  Compile both services
+Stage 2 TEST:   Run contract tests + drift detection
+Stage 3 REPORT: Summarize results + send notifications
+Stage 4 FIX:    Manual trigger — regenerate contracts + create MR
+Stage 5 DEPLOY: Only runs if ALL tests pass, only on main branch
+
+Key feature: if a contract test fails, deployment is BLOCKED.
+The team gets notified via Slack and email (GitLab Issue Notes).
+And there's a one-click auto-fix that regenerates contracts and
+opens a Merge Request for review."
+
+
+================================================================================
+ PART 3: THE LIVE DEMO — "Proof It Works" (8–10 minutes)
+================================================================================
+
+[Open terminal in VS Code, make sure you're in the project root]
+
+--- DEMO STEP 1: Show the Provider running and healthy ---
+
+SAY: "Let me start the Provider and show everything is healthy."
+
+RUN:
+  cd provider-api
+  mvn spring-boot:run
+
+[Wait for "Started ProviderApplication" message]
+
+RUN (in new terminal):
+  curl http://localhost:8080/api/users
+  curl http://localhost:8080/api/users/1
+
+SAY: "Provider is up. 3 users. Let me show the OpenAPI spec:"
+
+RUN:
+  curl http://localhost:8080/v3/api-docs | python -m json.tool | head -30
+
+SAY: "This is what the AI Agent reads — the full API specification,
+auto-generated from the code annotations."
+
+--- DEMO STEP 2: Show contract tests passing ---
+
+SAY: "Now let me run the contract tests:"
+
+RUN (stop Provider first, or use new terminal):
+  cd provider-api
+  mvn clean test
+
+[Show output — should see "Tests run: 6, Failures: 0"]
+
+SAY: "6 tests pass — 5 auto-generated from contracts, 1 smoke test.
+Spring Cloud Contract read those 5 YAML files and verified the real API
+matches every single contract."
+
+RUN:
+  cd ../consumer-api
+  mvn clean test
+
+[Show output — "Tests run: 2, Failures: 0, BUILD SUCCESS"]
+
+SAY: "Consumer passes too — it tested against WireMock stubs generated
+from the same contracts. Both sides verified against the same agreement."
+
+--- DEMO STEP 3: BREAK THE CONTRACT (The Money Shot) ---
+
+SAY: "Now the key demo — let me break a contract and show what happens."
+
+[Open file: provider-api/src/test/resources/contracts/user/should_return_user_by_id.yml]
+
+SAY: "I'm going to simulate a breaking change. Watch — I'll rename
+'name' to 'fullName' in the contract response body."
+
+DO: Change `name: "Alice Johnson"` to `fullName: "Alice Johnson"` in the YAML
+
+RUN:
+  cd provider-api
+  mvn clean test
+
+[Show the FAILURE — should see something like:]
+  "ContractVerifierTest > should_return_user_by_id FAILED"
+  "JSON path [$.fullName] doesn't match. Expected: Alice Johnson, Actual: null"
+  "BUILD FAILURE"
+
+SAY: "BUILD FAILURE. The contract says the response should have 'fullName',
+but the actual API returns 'name'. The test caught the mismatch INSTANTLY.
+
+In the CI pipeline, this would block deployment. The team gets notified.
+No breaking change reaches production."
+
+[REVERT the change back to `name: "Alice Johnson"`]
+
+RUN:
+  mvn clean test
+
+SAY: "Reverted. Tests pass again. That's the full cycle."
+
+--- DEMO STEP 4: Show the AI Agent ---
+
+SAY: "Now let me show the AI Agent in action."
+
+[Make sure Provider is running in background]
+
+RUN (in ai-agent directory):
+  cd ai-agent
+  .venv\Scripts\activate
+  python main.py drift
+
+SAY: "Drift detector shows all contracts are in sync — 100% coverage,
+no orphaned contracts, no schema drift. Health status: HEALTHY."
+
+RUN:
+  python main.py report
+
+SAY: "Full health report with coverage metrics and actionable recommendations."
+
+[OPTIONAL — if time allows]
+RUN:
+  python main.py generate --overwrite
+
+SAY: "The generate command re-reads the OpenAPI spec and regenerates
+all contracts. For a 50-endpoint API, this saves hours of manual work."
+
+--- DEMO STEP 5: Show the CI/CD Pipeline (GitLab) ---
+
+[Open browser → GitLab project → CI/CD → Pipelines]
+
+SAY: "Here's the live pipeline on GitLab. You can see the 5 stages:
+Build, Test, Report, Fix, Deploy.
+
+The test stage runs contract verification on every push.
+The report stage sends notifications.
+The fix stage is a manual trigger — click it and it auto-creates
+a Merge Request with regenerated contracts.
+Deploy only runs if everything passes on the main branch."
+
+[Show a passing pipeline — green checkmarks]
+[If available, show a previously failing pipeline — red X on test stage]
+
+SAY: "When tests fail, deploy is blocked. The team gets notified immediately."
+
+--- DEMO STEP 6: Show Notification Setup (if time allows) ---
+
+SAY: "For notifications, we use GitLab Issue Notes. The AI Agent creates
+a dedicated issue called 'Contract Testing Notifications' and posts
+results as comments. GitLab automatically emails all subscribers.
+
+This means: subscribe to one issue, get email alerts on every contract
+failure or drift detection. No additional SMTP setup required."
+
+
+================================================================================
+ PART 4: THE WRAP-UP — "Results & Impact" (2–3 minutes)
+================================================================================
+
+SAY:
+"Let me summarize what was built and the impact:"
+
+[Show these metrics — on screen or from memory]
+
+METRICS:
+  • 100% API coverage — all 5 endpoints have contracts
+  • 8 total tests passing (6 provider + 2 consumer)
+  • 9 CI/CD jobs across 5 stages — fully automated
+  • AI Agent with 7 tools — generates, detects, reports, notifies, fixes
+  • Breaking changes caught at build time — zero reach production
+  • Team notifications — Slack + email on any failure
+  • Auto-fix capability — one-click MR creation
+
+SAY:
+"The key takeaway: this shifts integration failure detection from
+production — which is expensive and painful — to build time — which
+is cheap and fast.
+
+For a team running 10+ microservices, this approach could prevent
+the majority of production integration failures. The AI Agent makes
+it scalable — it can handle 50+ endpoints without manual effort."
+
+[IF ASKED ABOUT FUTURE ENHANCEMENTS]
+
+SAY:
+"There are a few optional enhancements we could add:
+1. Multi-provider support — monitor multiple APIs from one agent
+2. Historical trending — track coverage and health over time
+3. LLM-powered generation — smarter sample values using AI models
+4. Kubernetes deployment — Helm charts for cloud-native setup
+
+But the core system is complete and production-ready."
+
+
+================================================================================
+ QUICK REFERENCE — KEY COMMANDS
+================================================================================
+
+ Provider API:
+   cd provider-api
+   mvn clean compile                    # Just compile
+   mvn spring-boot:run                  # Run on port 8080
+   mvn clean test                       # Run contract tests (6 tests)
+   mvn clean install                    # Tests + generate stubs JAR
+
+ Consumer API:
+   cd consumer-api
+   mvn clean test                       # Run against Provider stubs (2 tests)
+   mvn spring-boot:run                  # Run on port 8081
+
+ AI Agent:
+   cd ai-agent
+   .venv\Scripts\activate               # Activate Python venv
+   python main.py generate              # Generate contracts from OpenAPI spec
+   python main.py generate --overwrite  # Overwrite existing contracts
+   python main.py drift                 # Detect contract drift
+   python main.py report                # Health report with coverage
+   python main.py report --save-report  # Save report to ai-agent/reports/
+   python main.py validate              # CI-friendly (exit code 0/1/2)
+   python main.py ci                    # Generate .gitlab-ci.yml
+   python dashboard.py                  # Start Flask web dashboard
+
+ Useful URLs (when Provider is running):
+   http://localhost:8080/api/users       # All users (JSON)
+   http://localhost:8080/api/users/1     # Single user
+   http://localhost:8080/v3/api-docs     # OpenAPI spec
+   http://localhost:8080/swagger-ui.html # Interactive Swagger UI
+
+ Breaking Change Demo (quick version):
+   1. Open provider-api/src/test/resources/contracts/user/should_return_user_by_id.yml
+   2. Change `name: "Alice Johnson"` to `fullName: "Alice Johnson"`
+   3. Run: cd provider-api && mvn clean test
+   4. Watch it FAIL → BUILD FAILURE
+   5. Revert the change
+   6. Run: mvn clean test → BUILD SUCCESS
+
+
+================================================================================
+ TECH STACK QUICK REFERENCE
+================================================================================
+
+ Backend:          Java 25 (Oracle LTS) + Spring Boot 3.3.8
+ Contract Testing: Spring Cloud Contract 4.1.5 (Verifier + Stub Runner)
+ Spring Cloud BOM: 2023.0.4
+ API Docs:         springdoc-openapi 2.5.0 (OpenAPI 3.0)
+ Build Tool:       Apache Maven 3.9.12
+ AI Agent:         Python 3.14 + requests + PyYAML + Flask
+ CI/CD:            GitLab CI (9 jobs, 5 stages)
+ Notifications:    Slack Webhooks + GitLab Issue Notes (auto-email)
+ Version Control:  Git (GitHub mirror + GitLab primary)
+
+
+================================================================================
+ POTENTIAL MANAGER QUESTIONS & ANSWERS
+================================================================================
+
+Q: "Why contract testing instead of integration testing?"
+A: Integration tests require BOTH services running at the same time.
+   Contract tests work independently — Provider tests against contracts,
+   Consumer tests against stubs. Faster, more reliable, no flaky network.
+
+Q: "What happens when someone adds a new endpoint?"
+A: The AI Agent's drift detector catches it — reports "uncovered endpoint".
+   Run `python main.py generate` to auto-create the contract. Or the
+   auto-fix CI job can create a Merge Request automatically.
+
+Q: "Can this scale to 50+ endpoints?"
+A: Yes. The AI Agent reads the OpenAPI spec programmatically. Whether it's
+   5 endpoints or 500, it generates contracts in seconds. Manual work = zero.
+
+Q: "What's the CI pipeline time?"
+A: Build + test + report takes about 3-4 minutes in GitLab CI. Maven caching
+   makes subsequent runs faster.
+
+Q: "How does the notification work?"
+A: Two channels: Slack webhook (instant message) and GitLab Issue Notes.
+   For Issue Notes — the agent creates a dedicated issue, posts results as
+   comments. GitLab auto-emails all subscribers. Subscribe once, get all alerts.
+
+Q: "What if the contract test gives a false positive?"
+A: Contracts use regex matchers for flexible validation — they check structure
+   and format, not exact values. False positives are rare. If they happen,
+   you update the contract YAML (takes 30 seconds).
+
+Q: "Why Python for the AI Agent and not Java?"
+A: Python is ideal for scripting, HTTP calls, and YAML manipulation.
+   It keeps the agent lightweight and fast to iterate. The agent doesn't need
+   Spring Boot's framework — it just reads specs and writes files.
+
+Q: "Is this production-ready?"
+A: The contract testing (Java/Spring Cloud Contract) and CI/CD pipeline are
+   production-grade. The AI Agent is a developer tool — it generates files
+   that go through normal code review (MR) before merging.
+
+
+================================================================================
+ END OF DEMO SCRIPT
+================================================================================

@@ -36,6 +36,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.contract.stubrunner.spring.AutoConfigureStubRunner;
 import org.springframework.cloud.contract.stubrunner.spring.StubRunnerProperties;
+import org.springframework.test.context.TestPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,10 +47,9 @@ import static org.assertj.core.api.Assertions.assertThat;
          *   - com.contracttest:provider-api → matches the Provider's pom.xml coordinates
          *   - + → use the latest version of stubs available
          *   - stubs → the classifier for the stubs JAR
-         *   - 8080 → run the WireMock stub server on port 8080
-         *            (same port our UserServiceClient expects)
+         *   - 0 → use a RANDOM available port (avoids conflicts with running provider)
          */
-        ids = "com.contracttest:provider-api:+:stubs:8080",
+        ids = "com.contracttest:provider-api:+:stubs:0",
         /*
          * LOCAL mode: Look for stubs in the local Maven repository
          * (~/.m2/repository). The Provider must run `mvn install`
@@ -57,6 +57,10 @@ import static org.assertj.core.api.Assertions.assertThat;
          */
         stubsMode = StubRunnerProperties.StubsMode.LOCAL
 )
+@TestPropertySource(properties = {
+        // Point the consumer's client to the stub runner's random port
+        "provider.api.base-url=http://localhost:${stubrunner.runningstubs.provider-api.port}"
+})
 class UserServiceClientContractTest {
 
     @Autowired

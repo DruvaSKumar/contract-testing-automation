@@ -30,11 +30,16 @@
 package com.contracttest.provider;
 
 import com.contracttest.provider.controller.UserController;
+import com.contracttest.provider.exception.GlobalExceptionHandler;
 import com.contracttest.provider.service.UserService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.restassured.module.mockmvc.RestAssuredMockMvc;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.Map;
 
 /**
  * @SpringBootTest loads the FULL application context.
@@ -48,8 +53,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 @SpringBootTest
 public abstract class BaseContractTest {
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     @Autowired
     private UserController userController;
+
+    @Autowired
+    private GlobalExceptionHandler globalExceptionHandler;
 
     @Autowired
     private UserService userService;
@@ -67,6 +77,25 @@ public abstract class BaseContractTest {
     @BeforeEach
     public void setup() {
         userService.resetData();
-        RestAssuredMockMvc.standaloneSetup(userController);
+        RestAssuredMockMvc.standaloneSetup(userController, globalExceptionHandler);
+    }
+
+    /**
+     * Asserts that the actual fieldErrors map matches the expected JSON EXACTLY.
+     * No extra keys allowed, no missing keys allowed.
+     * Called by SCC-generated tests via by_command matcher.
+     */
+    @SuppressWarnings("unchecked")
+    protected void assertFieldErrorsStrict(Object actual, String expectedJson) {
+        try {
+            Map<String, String> actualMap = (Map<String, String>) actual;
+            Map<String, String> expectedMap = MAPPER.readValue(expectedJson,
+                    new TypeReference<Map<String, String>>() {});
+            org.assertj.core.api.Assertions.assertThat(actualMap)
+                    .as("fieldErrors must match exactly — no extra or missing keys allowed")
+                    .containsExactlyInAnyOrderEntriesOf(expectedMap);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new AssertionError("Invalid expected fieldErrors JSON: " + expectedJson, e);
+        }
     }
 }

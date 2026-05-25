@@ -1,0 +1,35 @@
+============================================================
+  EMAIL NOTIFICATION (saved locally — SMTP unreachable)
+============================================================
+  From:    contract-agent@noreply.bottomline.com
+  To:      Druva.SKumar@bottomline.com
+  Subject: [CONTRACT CRITICAL] Contract drift detected — 80.0% coverage
+============================================================
+
+CONTRACT DRIFT ALERT — CRITICAL
+Time: 2026-04-29 10:32:47 UTC
+
+Summary:
+  Health:       CRITICAL
+  Coverage:     80.0%
+  Endpoints:    5
+  Covered:      4
+  Drifted:      1
+  Uncovered:    0
+  Orphaned:     0
+
+Drifted Contracts:
+  GET /api/users/1 (should_return_user_by_id.yml)
+    - Field 'name' is in API spec but missing from contract
+    - Field 'fullname' is in contract but not in API spec
+
+Action Required:
+  Run: python main.py fix --create-mr
+  Or click the 'auto-fix-contracts' job in the pipeline.
+
+— Contract Testing AI Agent
+
+============================================================
+  NOTE: This email will be sent automatically in the CI
+  pipeline where the SMTP relay is reachable.
+============================================================
