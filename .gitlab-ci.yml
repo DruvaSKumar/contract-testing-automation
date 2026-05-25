@@ -525,6 +525,11 @@ mr-validation-comment:
   script:
     - cd $CI_PROJECT_DIR/ai-agent
     - . .venv/bin/activate
+    - |
+      if [ -z "$GITLAB_TOKEN" ]; then
+        echo "GITLAB_TOKEN not set — skipping MR comment (non-blocking)."
+        exit 0
+      fi
     - python3 main.py validate-mr
       --results-dir "$CI_PROJECT_DIR/ai-agent/reports"
       --provider-reports "$CI_PROJECT_DIR/provider-api/target/surefire-reports"
