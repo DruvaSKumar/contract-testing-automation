@@ -347,20 +347,14 @@
         <div class="subtitle">AI-Powered Contract Testing Automation &mdash; Real-time Health Monitoring</div>
     </div>
     <div class="header-right">
-        <div class="timestamp">{{ result.timestamp }}</div>
+        <div class="timestamp">2026-05-22 06:42:33 UTC</div>
         <a href="/" class="refresh-btn">&#x21bb; Refresh</a>
     </div>
 </div>
 
 <div class="container">
 
-{% if result.error %}
-<div class="error-banner">
-    <strong>Unable to Fetch Health Data</strong>
-    {{ result.error }}
-    <br><br>Make sure the Provider API is running: <code>cd provider-api && mvn spring-boot:run</code>
-</div>
-{% endif %}
+
 
 <!-- Tab Navigation -->
 <div class="tabs">
@@ -372,60 +366,60 @@
     <div class="tab" onclick="switchTab('actions')">Quick Actions</div>
 </div>
 
-{% if result.drift %}
-{% set s = result.drift.summary %}
+
+
 
 <!-- ================ OVERVIEW TAB ================ -->
 <div class="tab-content active" id="tab-overview">
 
 <!-- Metric Cards -->
 <div class="metrics">
-    <div class="metric-card" style="--accent: {% if s.health == 'HEALTHY' %}#3fb950{% elif s.health == 'WARNING' %}#d29922{% else %}#f85149{% endif %};">
+    <div class="metric-card" style="--accent: #d29922;">
         <div class="label">Health</div>
-        <div class="value"><span class="health-badge health-{{ s.health }}">{{ s.health }}</span></div>
+        <div class="value"><span class="health-badge health-WARNING">WARNING</span></div>
     </div>
     <div class="metric-card" style="--accent: #3fb950;">
         <div class="label">Coverage</div>
-        <div class="value" style="color:#3fb950;">{{ "%.0f"|format(s.coverage_percent) }}%</div>
+        <div class="value" style="color:#3fb950;">80%</div>
         <div class="coverage-bar-container">
-            <div class="coverage-bar {% if s.coverage_percent < 50 %}critical{% elif s.coverage_percent < 80 %}warning{% endif %}"
-                 style="width:{{ s.coverage_percent }}%"></div>
+            <div class="coverage-bar "
+                 style="width:80.0%"></div>
         </div>
     </div>
     <div class="metric-card" style="--accent: #79c0ff;">
         <div class="label">Contracts</div>
-        <div class="value" style="color:#79c0ff;">{{ s.total_contracts }}</div>
-        <div class="detail">{{ "%.1f"|format(s.total_contracts / s.total_spec_endpoints if s.total_spec_endpoints > 0 else 0) }} per endpoint</div>
+        <div class="value" style="color:#79c0ff;">5</div>
+        <div class="detail">1.0 per endpoint</div>
     </div>
     <div class="metric-card" style="--accent: #58a6ff;">
         <div class="label">Endpoints</div>
-        <div class="value" style="color:#58a6ff;">{{ s.total_spec_endpoints }}</div>
+        <div class="value" style="color:#58a6ff;">5</div>
         <div class="detail">In OpenAPI Spec</div>
     </div>
     <div class="metric-card" style="--accent: #f85149;">
         <div class="label">Uncovered</div>
-        <div class="value" style="color:{% if s.uncovered_count > 0 %}#f85149{% else %}#3fb950{% endif %};">{{ s.uncovered_count }}</div>
+        <div class="value" style="color:#3fb950;">0</div>
         <div class="detail">Missing contracts</div>
     </div>
     <div class="metric-card" style="--accent: #a371f7;">
         <div class="label">Drifted</div>
-        <div class="value" style="color:{% if s.drifted_count > 0 %}#a371f7{% else %}#3fb950{% endif %};">{{ s.drifted_count }}</div>
+        <div class="value" style="color:#a371f7;">1</div>
         <div class="detail">Schema mismatches</div>
     </div>
     <div class="metric-card" style="--accent: #d29922;">
         <div class="label">Orphaned</div>
-        <div class="value" style="color:{% if s.orphaned_count > 0 %}#d29922{% else %}#3fb950{% endif %};">{{ s.orphaned_count }}</div>
+        <div class="value" style="color:#3fb950;">0</div>
         <div class="detail">No matching endpoint</div>
     </div>
-    {% if test_results and test_results.provider %}
-    <div class="metric-card" style="--accent: {% if test_results.provider.failures > 0 %}#f85149{% else %}#3fb950{% endif %};">
+    
+    <div class="metric-card" style="--accent: #f85149;">
         <div class="label">Tests</div>
-        <div class="value" style="color:{% if test_results.provider.failures > 0 %}#f85149{% else %}#3fb950{% endif %};">
-            {{ test_results.provider.passed + (test_results.consumer.passed if test_results.consumer else 0) }}/{{ test_results.provider.tests + (test_results.consumer.tests if test_results.consumer else 0) }}
+        <div class="value" style="color:#f85149;">
+            14/15
         </div>
         <div class="detail">Passing</div>
     </div>
-    {% endif %}
+    
 </div>
 
 <!-- Combined Score + Contract Breakdown -->
@@ -433,103 +427,272 @@
     <!-- Score Ring -->
     <div class="section">
         <h2>Combined Quality Score</h2>
-        {% if result.coverage %}
+        
         <div style="display:flex; align-items:center; justify-content:space-around; flex-wrap:wrap;">
             <div class="score-ring">
-                {% set score = result.coverage.combined_score %}
-                {% set circumference = 283 %}
-                {% set offset = circumference - (score / 100) * circumference %}
+                
+                
+                
                 <svg width="120" height="120" viewBox="0 0 120 120">
                     <circle cx="60" cy="60" r="45" fill="none" stroke="#21262d" stroke-width="8"/>
                     <circle cx="60" cy="60" r="45" fill="none"
-                        stroke="{% if score >= 80 %}#3fb950{% elif score >= 50 %}#d29922{% else %}#f85149{% endif %}"
-                        stroke-width="8" stroke-dasharray="{{ circumference }}" stroke-dashoffset="{{ offset }}"
+                        stroke="#3fb950"
+                        stroke-width="8" stroke-dasharray="283" stroke-dashoffset="25.187000000000012"
                         stroke-linecap="round"/>
                 </svg>
-                <div class="value" style="color:{% if score >= 80 %}#3fb950{% elif score >= 50 %}#d29922{% else %}#f85149{% endif %};">{{ "%.0f"|format(score) }}%</div>
+                <div class="value" style="color:#3fb950;">91%</div>
                 <div class="sublabel">Combined Score</div>
             </div>
             <div style="text-align:left;">
                 <div style="margin-bottom:0.6rem;">
                     <span style="color:#8b949e; font-size:0.78rem;">Endpoint Coverage</span><br>
-                    <span style="color:#3fb950; font-weight:600;">{{ result.coverage.endpoint_coverage.percentage }}%</span>
-                    <span style="color:#484f58; font-size:0.78rem;">({{ result.coverage.endpoint_coverage.covered_endpoints }}/{{ result.coverage.endpoint_coverage.total_endpoints }})</span>
+                    <span style="color:#3fb950; font-weight:600;">100.0%</span>
+                    <span style="color:#484f58; font-size:0.78rem;">(5/5)</span>
                 </div>
                 <div style="margin-bottom:0.6rem;">
                     <span style="color:#8b949e; font-size:0.78rem;">Error Scenario Coverage</span><br>
-                    <span style="color:#d29922; font-weight:600;">{{ result.coverage.negative_contracts.percentage }}%</span>
-                    <span style="color:#484f58; font-size:0.78rem;">({{ result.coverage.negative_contracts.count }}/{{ result.coverage.negative_contracts.potential_scenarios }})</span>
+                    <span style="color:#d29922; font-weight:600;">77.8%</span>
+                    <span style="color:#484f58; font-size:0.78rem;">(7/9)</span>
                 </div>
                 <div>
                     <span style="color:#8b949e; font-size:0.78rem;">Contracts per Endpoint</span><br>
-                    <span style="color:#79c0ff; font-weight:600;">{{ result.coverage.contracts_per_endpoint }}</span>
+                    <span style="color:#79c0ff; font-weight:600;">2.4</span>
                 </div>
             </div>
         </div>
-        {% else %}
-        <p style="color:#484f58; text-align:center; padding:2rem;">Coverage data unavailable</p>
-        {% endif %}
+        
     </div>
 
     <!-- Contract Type Breakdown -->
     <div class="section">
         <h2>Contract Breakdown</h2>
-        {% if result.coverage %}
+        
         <table class="endpoint-table">
             <thead><tr><th>Type</th><th>Count</th><th>Details</th></tr></thead>
             <tbody>
                 <tr>
                     <td style="color:#3fb950;">&#x2705; Positive (200/201)</td>
-                    <td><strong style="color:#3fb950;">{{ result.coverage.positive_contracts.count }}</strong></td>
+                    <td><strong style="color:#3fb950;">5</strong></td>
                     <td class="file-name">Happy path scenarios</td>
                 </tr>
-                {% for status, count in result.coverage.negative_contracts.by_status.items() %}
+                
                 <tr>
                     <td>
-                        {% if status == '400' %}&#x26a0;&#xfe0f; Bad Request (400)
-                        {% elif status == '404' %}&#x1f50d; Not Found (404)
-                        {% elif status == '401' %}&#x1f512; Unauthorized (401)
-                        {% elif status == '403' %}&#x1f6ab; Forbidden (403)
-                        {% elif status == '500' %}&#x1f4a5; Server Error (500)
-                        {% else %}&#x274c; HTTP {{ status }}
-                        {% endif %}
+                        &#x26a0;&#xfe0f; Bad Request (400)
+                        
                     </td>
-                    <td><strong style="color:#d29922;">{{ count }}</strong></td>
+                    <td><strong style="color:#d29922;">4</strong></td>
                     <td class="file-name">Error scenario contracts</td>
                 </tr>
-                {% endfor %}
+                
+                <tr>
+                    <td>
+                        &#x1f50d; Not Found (404)
+                        
+                    </td>
+                    <td><strong style="color:#d29922;">3</strong></td>
+                    <td class="file-name">Error scenario contracts</td>
+                </tr>
+                
                 <tr style="border-top:1px solid #21262d;">
                     <td><strong>&#x1f4c4; Total</strong></td>
-                    <td><strong style="color:#79c0ff;">{{ result.coverage.total_contracts }}</strong></td>
-                    <td class="file-name">{{ result.coverage.contracts_per_endpoint }} per endpoint avg</td>
+                    <td><strong style="color:#79c0ff;">12</strong></td>
+                    <td class="file-name">2.4 per endpoint avg</td>
                 </tr>
             </tbody>
         </table>
-        {% endif %}
+        
     </div>
 </div>
 
 <!-- Health History -->
 <div class="section">
-    <h2>Health History <span class="badge">Last {{ history|length }} checks</span></h2>
-    {% if history|length > 1 %}
+    <h2>Health History <span class="badge">Last 49 checks</span></h2>
+    
     <div class="history-grid">
-        {% for h in history[-20:] %}
-        <div class="history-bar bar-{{ h.health }}"
-             style="height: {{ h.coverage_percent }}%;">
+        
+        <div class="history-bar bar-CRITICAL"
+             style="height: 80.0%;">
             <div class="tooltip">
-                {{ h.timestamp }}<br>
-                {{ h.health }} &mdash; {{ "%.0f"|format(h.coverage_percent) }}% coverage<br>
-                {{ h.covered }}/{{ h.total_endpoints }} endpoints
+                2026-05-06 09:16:47 UTC<br>
+                CRITICAL &mdash; 80% coverage<br>
+                4/5 endpoints
             </div>
         </div>
-        {% endfor %}
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-06 09:17:46 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-CRITICAL"
+             style="height: 80.0%;">
+            <div class="tooltip">
+                2026-05-06 10:49:39 UTC<br>
+                CRITICAL &mdash; 80% coverage<br>
+                4/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-14 07:15:58 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-14 07:16:13 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-CRITICAL"
+             style="height: 80.0%;">
+            <div class="tooltip">
+                2026-05-21 10:50:19 UTC<br>
+                CRITICAL &mdash; 80% coverage<br>
+                4/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-CRITICAL"
+             style="height: 80.0%;">
+            <div class="tooltip">
+                2026-05-21 10:50:28 UTC<br>
+                CRITICAL &mdash; 80% coverage<br>
+                4/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-CRITICAL"
+             style="height: 80.0%;">
+            <div class="tooltip">
+                2026-05-21 10:53:25 UTC<br>
+                CRITICAL &mdash; 80% coverage<br>
+                4/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-21 11:02:49 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-21 11:04:04 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-21 11:04:49 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-21 11:05:31 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-21 11:05:36 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-21 11:06:14 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-21 11:06:33 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-22 06:17:52 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-22 06:18:03 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-HEALTHY"
+             style="height: 100.0%;">
+            <div class="tooltip">
+                2026-05-22 06:20:16 UTC<br>
+                HEALTHY &mdash; 100% coverage<br>
+                5/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-WARNING"
+             style="height: 80.0%;">
+            <div class="tooltip">
+                2026-05-22 06:42:21 UTC<br>
+                WARNING &mdash; 80% coverage<br>
+                4/5 endpoints
+            </div>
+        </div>
+        
+        <div class="history-bar bar-WARNING"
+             style="height: 80.0%;">
+            <div class="tooltip">
+                2026-05-22 06:42:33 UTC<br>
+                WARNING &mdash; 80% coverage<br>
+                4/5 endpoints
+            </div>
+        </div>
+        
     </div>
-    {% else %}
-    <p style="color:#484f58; text-align:center; padding:1.5rem; font-style:italic;">
-        History will appear after multiple health checks. Refresh to record data points.
-    </p>
-    {% endif %}
+    
 </div>
 
 </div>
@@ -537,14 +700,14 @@
 <!-- ================ COVERAGE TAB ================ -->
 <div class="tab-content" id="tab-coverage">
 
-{% if result.coverage %}
+
 <div class="two-col">
     <!-- Coverage Trend Chart -->
     <div class="section">
         <h2>&#x1f4c8; Coverage Trend</h2>
-        {% if coverage_history|length > 1 %}
+        
         <div class="chart-container">
-            {% set points = coverage_history[-20:] %}
+            
             <svg viewBox="0 0 600 180" preserveAspectRatio="xMidYMid meet">
                 <!-- Grid lines -->
                 <line x1="40" y1="10" x2="40" y2="150" stroke="#21262d" stroke-width="0.5"/>
@@ -556,33 +719,43 @@
                 <text x="35" y="84" class="chart-label" text-anchor="end">50%</text>
                 <text x="35" y="14" class="chart-label" text-anchor="end">100%</text>
                 <!-- Endpoint coverage line -->
-                {% set ns = namespace(path='', dots='') %}
-                {% for p in points %}
-                    {% set x = 40 + (loop.index0 * (540 / ([points|length - 1, 1]|max))) %}
-                    {% set y = 150 - (p.endpoint_coverage_pct / 100 * 140) %}
-                    {% if loop.first %}
-                        {% set ns.path = 'M ' ~ x|int ~ ' ' ~ y|int %}
-                    {% else %}
-                        {% set ns.path = ns.path ~ ' L ' ~ x|int ~ ' ' ~ y|int %}
-                    {% endif %}
-                    {% set ns.dots = ns.dots ~ '<circle cx="' ~ x|int ~ '" cy="' ~ y|int ~ '" r="3" fill="#3fb950" class="chart-dot"><title>' ~ p.timestamp[:10] ~ ': ' ~ p.endpoint_coverage_pct ~ '% endpoint</title></circle>' %}
-                {% endfor %}
-                <path d="{{ ns.path }}" class="chart-line" stroke="#3fb950"/>
-                {{ ns.dots | safe }}
+                
+                
+                    
+                    
+                    
+                        
+                    
+                    
+                
+                    
+                    
+                    
+                        
+                    
+                    
+                
+                <path d="M 40 10 L 580 10" class="chart-line" stroke="#3fb950"/>
+                <circle cx="40" cy="10" r="3" fill="#3fb950" class="chart-dot"><title>2026-05-21: 100.0% endpoint</title></circle><circle cx="580" cy="10" r="3" fill="#3fb950" class="chart-dot"><title>2026-05-21: 100.0% endpoint</title></circle>
                 <!-- Negative coverage line -->
-                {% set ns2 = namespace(path='', dots='') %}
-                {% for p in points %}
-                    {% set x = 40 + (loop.index0 * (540 / ([points|length - 1, 1]|max))) %}
-                    {% set y = 150 - (p.negative_coverage_pct / 100 * 140) %}
-                    {% if loop.first %}
-                        {% set ns2.path = 'M ' ~ x|int ~ ' ' ~ y|int %}
-                    {% else %}
-                        {% set ns2.path = ns2.path ~ ' L ' ~ x|int ~ ' ' ~ y|int %}
-                    {% endif %}
-                    {% set ns2.dots = ns2.dots ~ '<circle cx="' ~ x|int ~ '" cy="' ~ y|int ~ '" r="3" fill="#d29922" class="chart-dot"><title>' ~ p.timestamp[:10] ~ ': ' ~ p.negative_coverage_pct ~ '% negative</title></circle>' %}
-                {% endfor %}
-                <path d="{{ ns2.path }}" class="chart-line" stroke="#d29922"/>
-                {{ ns2.dots | safe }}
+                
+                
+                    
+                    
+                    
+                        
+                    
+                    
+                
+                    
+                    
+                    
+                        
+                    
+                    
+                
+                <path d="M 40 41 L 580 41" class="chart-line" stroke="#d29922"/>
+                <circle cx="40" cy="41" r="3" fill="#d29922" class="chart-dot"><title>2026-05-21: 77.8% negative</title></circle><circle cx="580" cy="41" r="3" fill="#d29922" class="chart-dot"><title>2026-05-21: 77.8% negative</title></circle>
                 <!-- Legend -->
                 <circle cx="420" cy="170" r="4" fill="#3fb950"/>
                 <text x="428" y="173" class="chart-label" fill="#8b949e">Endpoint</text>
@@ -590,9 +763,7 @@
                 <text x="508" y="173" class="chart-label" fill="#8b949e">Error Scenarios</text>
             </svg>
         </div>
-        {% else %}
-        <p style="color:#484f58; text-align:center; padding:2rem; font-style:italic;">Run <code style="color:#79c0ff;">python main.py coverage</code> multiple times to see trends.</p>
-        {% endif %}
+        
     </div>
 
     <!-- Negative Coverage Details -->
@@ -601,129 +772,168 @@
         <div style="margin-bottom:1rem;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
                 <span style="font-size:0.82rem; color:#8b949e;">Error scenarios covered</span>
-                <span style="font-weight:600; color:#d29922;">{{ result.coverage.negative_contracts.percentage }}%</span>
+                <span style="font-weight:600; color:#d29922;">77.8%</span>
             </div>
             <div class="coverage-bar-container">
-                <div class="coverage-bar {% if result.coverage.negative_contracts.percentage < 30 %}critical{% elif result.coverage.negative_contracts.percentage < 60 %}warning{% endif %}"
-                     style="width:{{ result.coverage.negative_contracts.percentage }}%; background: linear-gradient(90deg, #9e6a03, #d29922);"></div>
+                <div class="coverage-bar "
+                     style="width:77.8%; background: linear-gradient(90deg, #9e6a03, #d29922);"></div>
             </div>
             <div style="font-size:0.72rem; color:#484f58; margin-top:0.3rem;">
-                {{ result.coverage.negative_contracts.count }} of {{ result.coverage.negative_contracts.potential_scenarios }} potential error scenarios
+                7 of 9 potential error scenarios
             </div>
         </div>
         <table class="endpoint-table">
             <thead><tr><th>Endpoint</th><th>Error Codes</th></tr></thead>
             <tbody>
-            {% for key, detail in result.coverage.negative_details.items() %}
+            
                 <tr>
-                    <td class="path" style="font-size:0.75rem;">{{ key }}</td>
+                    <td class="path" style="font-size:0.75rem;">GET /api/users/{id}</td>
                     <td>
-                        {% if detail.scenarios_covered %}
-                            {% for sc in detail.scenarios_covered %}
-                            <span class="status status-{% if sc == 400 %}orphaned{% elif sc == 404 %}drifted{% else %}uncovered{% endif %}" style="margin-right:4px;">{{ sc }}</span>
-                            {% endfor %}
-                        {% else %}
-                            <span style="color:#484f58; font-size:0.75rem; font-style:italic;">None</span>
-                        {% endif %}
+                        
+                            
+                            <span class="status status-drifted" style="margin-right:4px;">404</span>
+                            
+                        
                     </td>
                 </tr>
-            {% endfor %}
+            
+                <tr>
+                    <td class="path" style="font-size:0.75rem;">PUT /api/users/{id}</td>
+                    <td>
+                        
+                            
+                            <span class="status status-orphaned" style="margin-right:4px;">400</span>
+                            
+                            <span class="status status-orphaned" style="margin-right:4px;">400</span>
+                            
+                            <span class="status status-drifted" style="margin-right:4px;">404</span>
+                            
+                        
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td class="path" style="font-size:0.75rem;">DELETE /api/users/{id}</td>
+                    <td>
+                        
+                            
+                            <span class="status status-drifted" style="margin-right:4px;">404</span>
+                            
+                        
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td class="path" style="font-size:0.75rem;">GET /api/users</td>
+                    <td>
+                        
+                            <span style="color:#484f58; font-size:0.75rem; font-style:italic;">None</span>
+                        
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td class="path" style="font-size:0.75rem;">POST /api/users</td>
+                    <td>
+                        
+                            
+                            <span class="status status-orphaned" style="margin-right:4px;">400</span>
+                            
+                            <span class="status status-orphaned" style="margin-right:4px;">400</span>
+                            
+                        
+                    </td>
+                </tr>
+            
             </tbody>
         </table>
     </div>
 </div>
-{% endif %}
+
 
 </div>
 
 <!-- ================ ENDPOINTS TAB ================ -->
 <div class="tab-content" id="tab-endpoints">
 
-{% if result.drift.covered %}
+
 <div class="section">
-    <h2>&#x2705; Covered Endpoints <span class="badge" style="background:rgba(63,185,80,0.15);color:#3fb950;">{{ result.drift.covered|length }}</span></h2>
+    <h2>&#x2705; Covered Endpoints <span class="badge" style="background:rgba(63,185,80,0.15);color:#3fb950;">4</span></h2>
     <table class="endpoint-table">
         <thead><tr><th>Method</th><th>Path</th><th>Contract</th><th>Status</th></tr></thead>
         <tbody>
-        {% for ep in result.drift.covered %}
+        
             <tr>
-                <td><span class="method method-{{ ep.method }}">{{ ep.method }}</span></td>
-                <td class="path">{{ ep.url }}</td>
-                <td class="file-name">{{ ep.file }}</td>
+                <td><span class="method method-GET">GET</span></td>
+                <td class="path">/api/users/999</td>
+                <td class="file-name">should_return_404_when_getting_user_not_found.yml</td>
                 <td><span class="status status-covered">Covered</span></td>
             </tr>
-        {% endfor %}
+        
+            <tr>
+                <td><span class="method method-PUT">PUT</span></td>
+                <td class="path">/api/users/1</td>
+                <td class="file-name">should_return_400_when_updating_user_with_invalid_email.yml</td>
+                <td><span class="status status-covered">Covered</span></td>
+            </tr>
+        
+            <tr>
+                <td><span class="method method-GET">GET</span></td>
+                <td class="path">/api/users</td>
+                <td class="file-name">should_return_all_users.yml</td>
+                <td><span class="status status-covered">Covered</span></td>
+            </tr>
+        
+            <tr>
+                <td><span class="method method-DELETE">DELETE</span></td>
+                <td class="path">/api/users/1</td>
+                <td class="file-name">should_delete_user_by_id.yml</td>
+                <td><span class="status status-covered">Covered</span></td>
+            </tr>
+        
         </tbody>
     </table>
 </div>
-{% endif %}
+
 
 <div class="two-col">
     <div class="section">
-        <h2>&#x1f6a8; Uncovered <span class="badge" style="background:rgba(248,81,73,0.15);color:#f85149;">{{ result.drift.uncovered|length }}</span></h2>
-        {% if result.drift.uncovered %}
-        <table class="endpoint-table">
-            <thead><tr><th>Method</th><th>Path</th></tr></thead>
-            <tbody>
-            {% for ep in result.drift.uncovered %}
-                <tr>
-                    <td><span class="method method-{{ ep.method }}">{{ ep.method }}</span></td>
-                    <td class="path">{{ ep.path }}<div class="remediation">Run <code>python main.py generate</code></div></td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
+        <h2>&#x1f6a8; Uncovered <span class="badge" style="background:rgba(248,81,73,0.15);color:#f85149;">0</span></h2>
+        
         <p style="color:#3fb950; text-align:center; padding:1.5rem;">All endpoints covered!</p>
-        {% endif %}
+        
     </div>
 
     <div class="section">
-        <h2>&#x26a0;&#xfe0f; Drifted <span class="badge" style="background:rgba(163,113,247,0.15);color:#a371f7;">{{ result.drift.drifted|length }}</span></h2>
-        {% if result.drift.drifted %}
+        <h2>&#x26a0;&#xfe0f; Drifted <span class="badge" style="background:rgba(163,113,247,0.15);color:#a371f7;">1</span></h2>
+        
         <table class="endpoint-table">
-            <thead><tr><th>Method</th><th>URL</th><th>Issues & Suggested Fix</th></tr></thead>
+            <thead><tr><th>Method</th><th>URL</th><th>Issues</th></tr></thead>
             <tbody>
-            {% for ep in result.drift.drifted %}
+            
                 <tr>
-                    <td><span class="method method-{{ ep.method }}">{{ ep.method }}</span></td>
-                    <td class="path">{{ ep.url }}<br><span class="file-name">{{ ep.file }}</span></td>
+                    <td><span class="method method-POST">POST</span></td>
+                    <td class="path">/api/users</td>
                     <td>
-                        {% for issue in ep.issues %}
-                        <div style="color:#a371f7; font-size:0.78rem;">⚠️ {{ issue }}</div>
-                        {% endfor %}
-                        {% if ep.suggestion %}
-                        <div style="color:#3fb950; font-size:0.78rem; margin-top:0.4rem; padding:0.3rem 0.5rem; background:rgba(63,185,80,0.08); border-radius:4px;">💡 {{ ep.suggestion }}</div>
-                        {% endif %}
+                        
+                        <div style="color:#a371f7; font-size:0.78rem;">Required request field &#39;name&#39; is in API spec but missing from contract</div>
+                        
+                        <div style="color:#a371f7; font-size:0.78rem;">Request field &#39;fullname&#39; is in contract but not in API spec</div>
+                        
+                        <div style="color:#a371f7; font-size:0.78rem;">Field &#39;name&#39; is in API spec but missing from contract</div>
+                        
+                        <div style="color:#a371f7; font-size:0.78rem;">Field &#39;fullname&#39; is in contract but not in API spec</div>
+                        
                     </td>
                 </tr>
-            {% endfor %}
+            
             </tbody>
         </table>
-        {% else %}
-        <p style="color:#3fb950; text-align:center; padding:1.5rem;">No schema drift!</p>
-        {% endif %}
+        
     </div>
 </div>
 
-{% if result.drift.orphaned %}
-<div class="section">
-    <h2>&#x1f5d1;&#xfe0f; Orphaned <span class="badge" style="background:rgba(210,153,34,0.15);color:#d29922;">{{ result.drift.orphaned|length }}</span></h2>
-    <table class="endpoint-table">
-        <thead><tr><th>Method</th><th>URL</th><th>File</th><th>Action</th></tr></thead>
-        <tbody>
-        {% for ep in result.drift.orphaned %}
-            <tr>
-                <td><span class="method method-{{ ep.method }}">{{ ep.method }}</span></td>
-                <td class="path">{{ ep.url }}</td>
-                <td class="file-name">{{ ep.file }}</td>
-                <td><span class="status status-orphaned">Delete or update</span></td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endif %}
+
 
 </div>
 
@@ -733,46 +943,34 @@
 <div class="two-col" style="margin-bottom:1.2rem;">
     <div class="test-result-card">
         <div class="test-label">Provider Contract Tests</div>
-        {% if test_results and test_results.provider %}
-        <div class="pass-rate {{ 'green' if test_results.provider.failures == 0 else 'red' }}">
-            {{ test_results.provider.pass_rate }}%
+        
+        <div class="pass-rate red">
+            92.3%
         </div>
-        <div class="test-detail">{{ test_results.provider.passed }}/{{ test_results.provider.tests }} passing</div>
-        {% if test_results.provider.failures > 0 %}
-        <div style="color:#f85149; font-size:0.78rem; margin-top:0.3rem;">{{ test_results.provider.failures }} failure(s)</div>
-        {% endif %}
-        {% else %}
-        <div class="pass-rate" style="color:#484f58;">&mdash;</div>
-        <div class="test-detail">No recent results</div>
-        {% endif %}
+        <div class="test-detail">12/13 passing</div>
+        
+        <div style="color:#f85149; font-size:0.78rem; margin-top:0.3rem;">1 failure(s)</div>
+        
+        
     </div>
 
     <div class="test-result-card">
         <div class="test-label">Consumer Contract Tests</div>
-        {% if test_results and test_results.consumer %}
-        <div class="pass-rate {{ 'green' if test_results.consumer.failures == 0 else 'red' }}">
-            {{ test_results.consumer.pass_rate }}%
+        
+        <div class="pass-rate green">
+            100.0%
         </div>
-        <div class="test-detail">{{ test_results.consumer.passed }}/{{ test_results.consumer.tests }} passing</div>
-        {% if test_results.consumer.failures > 0 %}
-        <div style="color:#f85149; font-size:0.78rem; margin-top:0.3rem;">{{ test_results.consumer.failures }} failure(s)</div>
-        {% endif %}
-        {% else %}
-        <div class="pass-rate" style="color:#484f58;">&mdash;</div>
-        <div class="test-detail">No recent results</div>
-        {% endif %}
+        <div class="test-detail">2/2 passing</div>
+        
+        
     </div>
 </div>
 
 <div class="section">
     <h2>&#x1f50d; Root Cause Analysis</h2>
-    {% if rca_report %}
-    <div class="rca-box" style="white-space:pre-wrap; font-family:'Cascadia Code','Fira Code',monospace; font-size:0.82rem; line-height:1.7; background:rgba(88,166,255,0.05); border:1px solid #21262d; border-radius:8px; padding:1.2rem;">{{ rca_report }}</div>
-    {% else %}
-    <p style="color:#3fb950; text-align:center; padding:1.5rem;">
-        ✅ No issues detected — all contracts pass and no drift found!
-    </p>
-    {% endif %}
+    
+    <div class="rca-box">✅ No test failures detected — all contracts pass!</div>
+    
 </div>
 
 </div>
@@ -782,34 +980,13 @@
 
 <div class="section">
     <h2>&#x1f504; Backward Compatibility Status</h2>
-    {% if compat_report %}
-    <div class="compat-card compat-{{ compat_report.status }}" style="margin-bottom:1rem;">
-        <div class="compat-icon">
-            {% if compat_report.status == 'compatible' %}&#x2705;
-            {% elif compat_report.status == 'warning' %}&#x26a0;&#xfe0f;
-            {% else %}&#x274c;{% endif %}
-        </div>
-        <div class="compat-text">
-            <strong>
-                {% if compat_report.status == 'compatible' %}Fully Backward Compatible
-                {% elif compat_report.status == 'warning' %}Compatible with Warnings
-                {% else %}Breaking Changes Detected{% endif %}
-            </strong>
-            <span style="color:#8b949e; font-size:0.82rem;">
-                {% if compat_report.status == 'compatible' %}No breaking changes since the last baseline. Safe to merge.
-                {% elif compat_report.status == 'warning' %}Non-breaking changes detected. Review before merging.
-                {% else %}This change would break existing consumers. Needs review.{% endif %}
-            </span>
-        </div>
-    </div>
-    <div class="rca-box" style="max-height:400px;">{{ compat_report.report }}</div>
-    {% else %}
+    
     <div style="text-align:center; padding:3rem;">
         <div style="font-size:2.5rem; margin-bottom:0.5rem;">&#x1f504;</div>
         <p style="color:#8b949e; margin-bottom:0.5rem;">No compatibility check has been run yet.</p>
         <p style="color:#484f58; font-size:0.82rem;">Run <code style="color:#79c0ff;">python main.py compat</code> to compare your API against the baseline.</p>
     </div>
-    {% endif %}
+    
 </div>
 
 </div>
@@ -867,14 +1044,14 @@
 
 </div>
 
-{% endif %}
+
 
 </div>
 
 <!-- Footer -->
 <div class="footer">
     Contract Testing Automation with AI Agents &mdash; Powered by Spring Cloud Contract + OpenAPI + AI Analysis
-    <br>Provider: {{ "http://localhost:8080" }} &middot; Dashboard: {{ "http://localhost:5050" }}
+    <br>Provider: http://localhost:8080 &middot; Dashboard: http://localhost:5050
 </div>
 
 <script>

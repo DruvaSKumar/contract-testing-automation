@@ -44,10 +44,15 @@ import yaml
 
 from agent.spec_reader import OpenApiSpecReader
 from agent.contract_generator import ContractGenerator
+from agent.negative_contract_generator import NegativeContractGenerator
+from agent.backward_compatibility import BackwardCompatibilityChecker
 from agent.drift_detector import DriftDetector
 from agent.report_generator import ReportGenerator
 from agent.ci_config_generator import CIConfigGenerator
 from agent.mr_creator import MRCreator
+from agent.mr_validator import MRValidator
+from agent.root_cause_analyzer import RootCauseAnalyzer
+from agent.coverage_tracker import CoverageTracker
 from agent.notifier import Notifier
 
 
@@ -96,7 +101,16 @@ def cmd_generate(args):
     generator = ContractGenerator(output_dir=args.output_dir)
     results = generator.generate_all(endpoints, overwrite=args.overwrite)
 
-    # Step 4: Generate and print report
+    # Step 4: Generate negative/error contracts (400, 404)
+    if not args.no_negative:
+        neg_generator = NegativeContractGenerator(output_dir=args.output_dir)
+        neg_results = neg_generator.generate_all(endpoints, overwrite=args.overwrite)
+        # Merge results
+        results["generated"].extend(neg_results["generated"])
+        results["skipped"].extend(neg_results["skipped"])
+        results["errors"].extend(neg_results["errors"])
+
+    # Step 5: Generate and print report
     reporter = ReportGenerator()
     report = reporter.generate_generation_report(results)
     print(report)
@@ -107,6 +121,9 @@ def cmd_generate(args):
             os.path.dirname(os.path.abspath(__file__)), "reports", "generation_report.txt"
         )
         reporter.save_report(report, report_path)
+
+    # Step 6: Save spec snapshot for backward compatibility tracking
+    BackwardCompatibilityChecker.save_spec_snapshot(reader.spec)
 
     return results
 
@@ -607,6 +624,271 @@ def _print_notify_result(result):
     print("")
 
 
+def cmd_compat(args):
+    """
+    COMPAT command — Checks backward compatibility between the current
+    API spec and the previous version (from main branch or a saved file).
+
+    Steps:
+      1. Load the current OpenAPI spec (from running Provider or file)
+      2. Load the previous spec (from git main branch or a baseline file)
+      3. Compare and report breaking changes, warnings, and info
+      4. Exit code: 0=compatible, 1=warnings, 2=breaking changes
+    """
+    print("\n" + "=" * 65)
+    print("  AI AGENT: Backward Compatibility Check")
+    print("=" * 65)
+
+    # Step 1: Load the current (new) spec
+    reader = OpenApiSpecReader(args.provider_url)
+    try:
+        if args.spec_file:
+            reader.load_spec_from_file(args.spec_file)
+        else:
+            reader.fetch_spec()
+    except (ConnectionError, ValueError) as e:
+        print(str(e))
+        sys.exit(1)
+
+    new_spec = reader.spec
+
+    # Step 2: Load the old (baseline) spec
+    checker = BackwardCompatibilityChecker()
+
+    if args.baseline_file:
+        # Load from explicit file
+        print(f"[COMPAT] Loading baseline spec from: {args.baseline_file}")
+        import json as json_module
+        with open(args.baseline_file, "r", encoding="utf-8") as f:
+            old_spec = json_module.load(f)
+    else:
+        # Try to load from git main branch
+        branch = args.baseline_branch
+        print(f"[COMPAT] Loading baseline spec from branch: {branch}")
+        old_spec = BackwardCompatibilityChecker.load_spec_from_branch(
+            branch=branch, spec_path=args.baseline_spec_path
+        )
+        if old_spec is None:
+            print(f"\n  [WARNING] No baseline spec found in branch '{branch}'.")
+            print(f"  Saving current spec as baseline for future comparisons...")
+            BackwardCompatibilityChecker.save_spec_snapshot(new_spec)
+            print(f"\n  Run this command again after the next API change to detect breaking changes.")
+            sys.exit(0)
+
+    # Step 3: Run compatibility check
+    results = checker.check_compatibility(old_spec, new_spec)
+
+    # Print results
+    print(results["summary"])
+
+    # Step 4: Save current spec as snapshot (for next comparison)
+    if args.save_snapshot:
+        BackwardCompatibilityChecker.save_spec_snapshot(new_spec)
+
+    # Save report if requested
+    if args.save_report:
+        report_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "reports", "compatibility_report.txt"
+        )
+        os.makedirs(os.path.dirname(report_path), exist_ok=True)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(results["summary"])
+        print(f"  Report saved: {report_path}")
+
+    # Exit code based on severity
+    if not results["is_compatible"]:
+        sys.exit(2)  # Breaking changes
+    elif results["warnings"]:
+        sys.exit(1)  # Warnings only
+    else:
+        sys.exit(0)  # Fully compatible
+
+
+def cmd_validate_mr(args):
+    """
+    VALIDATE-MR command — Collects all test/validation results and
+    posts a formatted summary comment on the GitLab Merge Request.
+
+    This runs at the end of the MR pipeline to give a single
+    consolidated view of all contract testing checks.
+    """
+    print("\n" + "=" * 65)
+    print("  AI AGENT: MR Validation Summary")
+    print("=" * 65)
+
+    try:
+        validator = MRValidator()
+    except ValueError as e:
+        print(f"\n  [ERROR] {e}")
+        print("  This command only works in GitLab MR pipelines.")
+        sys.exit(1)
+
+    # Determine report paths
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    results_dir = args.results_dir or os.path.join(base_dir, "reports")
+    provider_report_dir = args.provider_reports or os.path.join(
+        base_dir, "..", "provider-api", "target", "surefire-reports"
+    )
+    consumer_report_dir = args.consumer_reports or os.path.join(
+        base_dir, "..", "consumer-api", "target", "surefire-reports"
+    )
+    compat_report_file = args.compat_report or os.path.join(
+        base_dir, "reports", "compatibility_report.txt"
+    )
+
+    # Run validation and post comment
+    results = validator.validate_and_comment(
+        results_dir=results_dir,
+        provider_report_dir=provider_report_dir,
+        consumer_report_dir=consumer_report_dir,
+        compat_report_file=compat_report_file,
+    )
+
+    # Print summary locally too
+    status_icon = {"passed": "✅", "failed": "❌", "warning": "⚠️"}.get(
+        results["overall_status"], "❓"
+    )
+    print(f"\n  {status_icon} Overall Status: {results['overall_status'].upper()}")
+    print(f"  Drift:        {results['drift']['status']} — {results['drift']['details']}")
+    print(f"  Provider:     {results['provider_tests']['status']} — {results['provider_tests']['details']}")
+    print(f"  Consumer:     {results['consumer_tests']['status']} — {results['consumer_tests']['details']}")
+    print(f"  Compat:       {results['compatibility']['status']} — {results['compatibility']['details']}")
+
+    if results.get("comment_url"):
+        print(f"\n  Comment posted: {results['comment_url']}")
+
+    print("")
+
+    # Exit code based on overall status
+    if results["overall_status"] == "failed":
+        sys.exit(1)
+    else:
+        sys.exit(0)
+
+
+def cmd_analyze(args):
+    """
+    ANALYZE command — Performs AI root cause analysis on contract test
+    failures. Parses surefire reports, classifies failures, and provides
+    human-readable explanations with fix suggestions.
+
+    Can also include analysis in Teams/Slack notifications.
+    """
+    print("\n" + "=" * 65)
+    print("  AI AGENT: Root Cause Analysis")
+    print("=" * 65)
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    provider_report_dir = args.provider_reports or os.path.join(
+        base_dir, "..", "provider-api", "target", "surefire-reports"
+    )
+    consumer_report_dir = args.consumer_reports or os.path.join(
+        base_dir, "..", "consumer-api", "target", "surefire-reports"
+    )
+
+    # Optionally load drift results for correlation
+    drift_results = None
+    drift_file = os.path.join(base_dir, "reports", "drift_report.json")
+    if os.path.exists(drift_file):
+        import json as json_module
+        with open(drift_file, "r", encoding="utf-8") as f:
+            drift_results = json_module.load(f)
+
+    # Run analysis
+    analyzer = RootCauseAnalyzer()
+    results = analyzer.analyze_failures(
+        provider_report_dir=provider_report_dir,
+        consumer_report_dir=consumer_report_dir,
+        drift_results=drift_results,
+    )
+
+    # Print summary
+    print(results["summary"])
+
+    # Save report
+    if args.save_report:
+        analyzer.save_report()
+
+    # Send notification with analysis
+    if args.notify and results["has_failures"]:
+        notifier = Notifier()
+        notification_text = analyzer.get_notification_text()
+        result = notifier.notify_custom(
+            subject="🔍 Contract Test Root Cause Analysis",
+            body=notification_text,
+            pipeline_url=args.pipeline_url,
+        )
+        _print_notify_result(result)
+
+    # Exit code: 1 if failures found, 0 if clean
+    if results["has_failures"]:
+        print(f"\n  ❌ {results['total_failures']} failure(s) analyzed.")
+        sys.exit(1)
+    else:
+        print("\n  ✅ No failures found.")
+        sys.exit(0)
+
+
+def cmd_coverage(args):
+    """
+    COVERAGE command — Calculates contract coverage metrics and trends.
+    Shows positive vs negative coverage, per-endpoint breakdown,
+    and trend analysis over time.
+    """
+    print("\n" + "=" * 65)
+    print("  AI AGENT: Coverage Metrics & Trends")
+    print("=" * 65)
+
+    # Step 1: Read the OpenAPI spec to get endpoints
+    reader = OpenApiSpecReader(args.provider_url)
+    try:
+        if args.spec_file:
+            reader.load_spec_from_file(args.spec_file)
+        else:
+            reader.fetch_spec()
+    except (ConnectionError, ValueError) as e:
+        print(str(e))
+        sys.exit(1)
+
+    endpoints = reader.extract_endpoints()
+
+    # Step 2: Calculate coverage
+    tracker = CoverageTracker()
+    metrics = tracker.calculate_coverage(endpoints, contracts_dir=args.contracts_dir)
+
+    # Step 3: Record snapshot for trend tracking
+    tracker.record_snapshot(metrics)
+
+    # Step 4: Get trends
+    trends = tracker.get_trends()
+
+    # Step 5: Print summary
+    summary = tracker.get_summary_text(metrics, trends)
+    print(summary)
+
+    # Save report if requested
+    if args.save_report:
+        report_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "reports", "coverage_report.txt"
+        )
+        os.makedirs(os.path.dirname(report_path), exist_ok=True)
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(summary)
+        print(f"  Report saved: {report_path}")
+
+    # Save JSON metrics for dashboard consumption
+    metrics_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "reports", "coverage_metrics.json"
+    )
+    os.makedirs(os.path.dirname(metrics_path), exist_ok=True)
+    import json as json_module
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json_module.dump(metrics, f, indent=2)
+
+    print("")
+    return metrics
+
+
 def main():
     """
     Main entry point — parses CLI arguments and dispatches to the
@@ -633,6 +915,10 @@ def main():
             "  python main.py fix                        Auto-fix drifted contracts (local)\n"
             "  python main.py fix --create-mr            Auto-fix + create GitLab MR\n"
             "  python main.py notify                     Send notifications on drift\n"
+            "  python main.py compat                     Check backward compatibility\n"
+            "  python main.py validate-mr                Post MR validation comment\n"
+            "  python main.py analyze                    Root cause analysis of failures\n"
+            "  python main.py coverage                   Coverage metrics & trends\n"
             "  python main.py dashboard                  Start the health dashboard\n"
         ),
     )
@@ -686,6 +972,11 @@ def main():
         "--output-dir",
         default=get_default_contracts_dir(),
         help="Directory to output generated contract files",
+    )
+    gen_parser.add_argument(
+        "--no-negative",
+        action="store_true",
+        help="Skip generating negative/error contracts (400, 404 scenarios)",
     )
 
     # --- drift ---
@@ -777,6 +1068,110 @@ def main():
         help="Last lines of log output from the failed job",
     )
 
+    # --- compat command ---
+    compat_parser = subparsers.add_parser(
+        "compat",
+        help="Check backward compatibility of API changes against baseline",
+    )
+    compat_parser.add_argument(
+        "--baseline-file",
+        default=None,
+        help="Path to a saved baseline OpenAPI spec JSON file",
+    )
+    compat_parser.add_argument(
+        "--baseline-branch",
+        default="main",
+        help="Git branch to load the baseline spec from (default: main)",
+    )
+    compat_parser.add_argument(
+        "--baseline-spec-path",
+        default=None,
+        help="Path within the git branch to the spec file",
+    )
+    compat_parser.add_argument(
+        "--save-snapshot",
+        action="store_true",
+        help="Save the current spec as a snapshot for future comparisons",
+    )
+    compat_parser.add_argument(
+        "--save-report",
+        action="store_true",
+        help="Save the compatibility report to a file",
+    )
+
+    # --- validate-mr command ---
+    valmr_parser = subparsers.add_parser(
+        "validate-mr",
+        help="Post contract test validation summary as MR comment (MR pipelines only)",
+    )
+    valmr_parser.add_argument(
+        "--results-dir",
+        default=None,
+        help="Path to ai-agent/reports/ directory with drift results",
+    )
+    valmr_parser.add_argument(
+        "--provider-reports",
+        default=None,
+        help="Path to provider-api surefire-reports/ directory",
+    )
+    valmr_parser.add_argument(
+        "--consumer-reports",
+        default=None,
+        help="Path to consumer-api surefire-reports/ directory",
+    )
+    valmr_parser.add_argument(
+        "--compat-report",
+        default=None,
+        help="Path to compatibility_report.txt",
+    )
+
+    # --- analyze command ---
+    analyze_parser = subparsers.add_parser(
+        "analyze",
+        help="AI root cause analysis of contract test failures",
+    )
+    analyze_parser.add_argument(
+        "--provider-reports",
+        default=None,
+        help="Path to provider-api surefire-reports/ directory",
+    )
+    analyze_parser.add_argument(
+        "--consumer-reports",
+        default=None,
+        help="Path to consumer-api surefire-reports/ directory",
+    )
+    analyze_parser.add_argument(
+        "--save-report",
+        action="store_true",
+        help="Save the analysis report to a file",
+    )
+    analyze_parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="Send notification with root cause analysis",
+    )
+    analyze_parser.add_argument(
+        "--pipeline-url",
+        default=None,
+        help="CI pipeline URL (for notification links)",
+    )
+
+    # --- coverage command ---
+    cov_parser = subparsers.add_parser(
+        "coverage",
+        help="Calculate coverage metrics and track trends over time",
+    )
+    cov_parser.add_argument(
+        "--save-report",
+        action="store_true",
+        help="Save the coverage report to a file",
+    )
+    cov_parser.add_argument(
+        "--contracts-dir",
+        default=None,
+        help="Path to contracts directory (default: auto-detect)",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -792,6 +1187,10 @@ def main():
         "ci": cmd_ci,
         "fix": cmd_fix,
         "notify": cmd_notify,
+        "compat": cmd_compat,
+        "validate-mr": cmd_validate_mr,
+        "analyze": cmd_analyze,
+        "coverage": cmd_coverage,
         "dashboard": cmd_dashboard,
     }
 

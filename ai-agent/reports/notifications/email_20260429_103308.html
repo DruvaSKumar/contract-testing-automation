@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #333; }
+  .container { max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #e1e4e8; border-radius: 6px; }
+  h2 { color: #d73a49; border-bottom: 1px solid #e1e4e8; padding-bottom: 8px; }
+  .content { font-family: monospace; font-size: 13px; line-height: 1.6; }
+  .footer { margin-top: 20px; font-size: 12px; color: #6a737d; }
+</style></head>
+<body>
+  <div class="container">
+    <h2>[CONTRACT CRITICAL] Contract drift detected — 80.0% coverage</h2>
+    <div class="content">CONTRACT DRIFT ALERT — CRITICAL<br>
+Time: 2026-04-29 10:32:47 UTC<br>
+<br>
+Summary:<br>
+  Health:       CRITICAL<br>
+  Coverage:     80.0%<br>
+  Endpoints:    5<br>
+  Covered:      4<br>
+  Drifted:      1<br>
+  Uncovered:    0<br>
+  Orphaned:     0<br>
+<br>
+Drifted Contracts:<br>
+  GET /api/users/1 (should_return_user_by_id.yml)<br>
+    - Field 'name' is in API spec but missing from contract<br>
+    - Field 'fullname' is in contract but not in API spec<br>
+<br>
+Action Required:<br>
+  Run: python main.py fix --create-mr<br>
+  Or click the 'auto-fix-contracts' job in the pipeline.<br>
+<br>
+— Contract Testing AI Agent</div>
+    <div class="footer">Sent by Contract Testing AI Agent</div>
+  </div>
+</body>
+</html>

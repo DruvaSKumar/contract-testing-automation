@@ -258,6 +258,31 @@ class Notifier:
             # Send summary report (HEALTHY confirmation)
             return self.notify_report(drift_results, command_name, pipeline_url)
 
+    def notify_custom(self, subject, body, pipeline_url=None):
+        """
+        Sends a custom notification with arbitrary subject and body.
+        Used by root cause analysis and other modules.
+
+        Returns:
+            dict: {slack: bool, email: bool}
+        """
+        results = {"slack": False, "email": False}
+
+        # Teams (primary)
+        teams_sent = self._send_teams(subject, body, pipeline_url)
+        if teams_sent:
+            results["teams"] = True
+
+        # Slack
+        if self.slack_webhook_url:
+            payload = {"text": f"*{subject}*\n\n{body}"}
+            results["slack"] = self._send_slack(payload)
+
+        # Email
+        results["email"] = self._send_notification(subject, body)
+
+        return results
+
     # ----------------------------------------------------------------
     # Microsoft Teams (PRIMARY notification method)
     # ----------------------------------------------------------------
@@ -919,6 +944,8 @@ class Notifier:
                 lines.append(f"  {d['method']} {d['url']} ({d['file']})")
                 for issue in d.get("issues", []):
                     lines.append(f"    - {issue}")
+                if d.get("suggestion"):
+                    lines.append(f"    💡 Fix: {d['suggestion']}")
 
         uncovered = drift_results.get("uncovered", [])
         if uncovered:
@@ -971,6 +998,8 @@ class Notifier:
                 lines.append(f"  {d['method']} {d['url']} ({d['file']})")
                 for issue in d.get("issues", []):
                     lines.append(f"    - {issue}")
+                if d.get("suggestion"):
+                    lines.append(f"    💡 Fix: {d['suggestion']}")
 
         uncovered = drift_results.get("uncovered", [])
         if uncovered:
