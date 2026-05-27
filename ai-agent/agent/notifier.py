@@ -374,23 +374,47 @@ class Notifier:
             })
 
             # Build artifact URLs from pipeline URL
-            # GitLab pipeline URL: .../pipelines/12345
-            # Job browse URL: .../-/jobs/<id>/artifacts/browse (we use the job artifacts path)
+            # Use GitLab Pages for persistent dashboard URL
+            # Use job artifacts for report (with fallback to Pages)
             project_path = os.environ.get("CI_PROJECT_PATH", "")
             job_id = os.environ.get("CI_JOB_ID", "")
             gitlab_base = os.environ.get("CI_SERVER_URL", "https://gitlab.com")
+            pages_base = os.environ.get("CI_PAGES_URL", "")
 
-            if project_path and job_id:
-                artifacts_base = f"{gitlab_base}/{project_path}/-/jobs/{job_id}/artifacts/file"
+            # Build Pages URL if not explicitly set
+            if not pages_base and project_path:
+                # GitLab Pages URL for nested groups:
+                # Project: one-bottomline/core-services/internship/contract-testing/contract-testing-automation
+                # Pages:   https://one-bottomline.gitlab.io/core-services/internship/contract-testing/contract-testing-automation
+                parts = project_path.split("/")
+                if len(parts) >= 2:
+                    root_namespace = parts[0]
+                    subpath = "/".join(parts[1:])
+                    pages_base = f"https://{root_namespace}.gitlab.io/{subpath}"
+
+            if pages_base:
                 actions.append({
                     "type": "Action.OpenUrl",
                     "title": "View Dashboard",
-                    "url": f"{artifacts_base}/ai-agent/reports/dashboard.html",
+                    "url": pages_base,
                 })
                 actions.append({
                     "type": "Action.OpenUrl",
                     "title": "View Report",
-                    "url": f"{artifacts_base}/ai-agent/reports/full_report.txt",
+                    "url": f"{pages_base}/report.html",
+                })
+            elif project_path and job_id:
+                # Fallback: use job artifacts browse URL
+                artifacts_base = f"{gitlab_base}/{project_path}/-/jobs/{job_id}/artifacts/browse"
+                actions.append({
+                    "type": "Action.OpenUrl",
+                    "title": "View Dashboard",
+                    "url": f"{artifacts_base}/ai-agent/reports/",
+                })
+                actions.append({
+                    "type": "Action.OpenUrl",
+                    "title": "View Report",
+                    "url": f"{artifacts_base}/ai-agent/reports/",
                 })
 
         card = {
