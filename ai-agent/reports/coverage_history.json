@@ -18,5 +18,15 @@
     "positive_count": 5,
     "negative_count": 7,
     "total_endpoints": 5
+  },
+  {
+    "timestamp": "2026-05-26 09:55:01 UTC",
+    "endpoint_coverage_pct": 100.0,
+    "negative_coverage_pct": 77.8,
+    "combined_score": 91.1,
+    "total_contracts": 12,
+    "positive_count": 5,
+    "negative_count": 7,
+    "total_endpoints": 5
   }
 ]
