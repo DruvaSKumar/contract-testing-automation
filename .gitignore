@@ -66,4 +66,9 @@ CONFLUENCE_PAGE.md        # Internal documentation (not for repo)
 PRESENTATION_CONTENT.md   # Presentation content (kept locally only)
 *.pptx                    # PowerPoint presentations (not for repo)
 *.docx                    # Word documents (not for repo)
-ai-agent/reports/         # Generated reports and notification previews
+ai-agent/reports/notifications/  # Generated email notification previews
+
+# ----- Temporary test/demo output -----
+*_test.txt
+e2e_*.txt
+test_*.txt
