@@ -1,27 +1,5 @@
 [
   {
-    "timestamp": "2026-04-24 06:32:43 UTC",
-    "health": "CRITICAL",
-    "coverage_percent": 80.0,
-    "covered": 4,
-    "uncovered": 0,
-    "orphaned": 0,
-    "drifted": 1,
-    "total_endpoints": 5,
-    "total_contracts": 5
-  },
-  {
-    "timestamp": "2026-04-24 06:43:41 UTC",
-    "health": "HEALTHY",
-    "coverage_percent": 100.0,
-    "covered": 5,
-    "uncovered": 0,
-    "orphaned": 0,
-    "drifted": 0,
-    "total_endpoints": 5,
-    "total_contracts": 5
-  },
-  {
     "timestamp": "2026-04-24 08:24:59 UTC",
     "health": "HEALTHY",
     "coverage_percent": 100.0,
@@ -548,5 +526,27 @@
     "drifted": 0,
     "total_endpoints": 5,
     "total_contracts": 5
+  },
+  {
+    "timestamp": "2026-05-26 09:28:20 UTC",
+    "health": "HEALTHY",
+    "coverage_percent": 100.0,
+    "covered": 5,
+    "uncovered": 0,
+    "orphaned": 0,
+    "drifted": 0,
+    "total_endpoints": 5,
+    "total_contracts": 12
+  },
+  {
+    "timestamp": "2026-05-26 09:55:28 UTC",
+    "health": "HEALTHY",
+    "coverage_percent": 100.0,
+    "covered": 5,
+    "uncovered": 0,
+    "orphaned": 0,
+    "drifted": 0,
+    "total_endpoints": 5,
+    "total_contracts": 12
   }
 ]
