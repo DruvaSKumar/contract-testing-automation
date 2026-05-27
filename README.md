@@ -51,9 +51,12 @@ Contract testing verifies that the provider **actually fulfills** these contract
 1. **Two real microservices** — a Provider (User Service) and a Consumer (Order Service) that communicate over HTTP, demonstrating real-world inter-service dependencies
 2. **Spring Cloud Contract** — auto-generates tests from YAML contract files on the Provider side, and creates WireMock stubs for the Consumer side
 3. **Breaking change detection** — when someone modifies the API in a way that violates contracts, tests fail immediately, blocking bad deployments
-4. **AI-powered contract generation** — a Python agent reads the OpenAPI spec and automatically generates/updates contract files
-5. **Automated CI/CD pipeline** — GitLab CI with 9 jobs across 5 stages, including auto-fix and team notifications
-6. **Team notifications** — Slack webhooks + GitLab Issue Notes that auto-email subscribers on contract failures
+4. **AI-powered contract generation** — a Python agent with **12 modules** reads the OpenAPI spec and automatically generates/updates contract files (both positive and negative scenarios)
+5. **Automated CI/CD pipeline** — GitLab CI with **13 jobs across 5 stages**, including drift detection, backward compatibility checks, auto-fix, root cause analysis, MR validation comments, and team notifications
+6. **Multi-channel notifications** — Microsoft Teams, Slack webhooks, GitLab Issue Notes, and SMTP email — automatic alerts on contract failures
+7. **AI Root Cause Analysis** — when tests fail, automatically explains WHAT failed, WHY, and HOW to fix it
+8. **Backward Compatibility Checker** — blocks merges that introduce breaking API changes
+9. **Live Web Dashboard** — Flask-based contract health dashboard with real-time metrics, coverage tracking, and RCA display
 
 ---
 
@@ -204,26 +207,33 @@ contract-testing-automation/
 │   │           └── UserServiceClientContractTest.java ← Consumer contract test
 │   └── target/                        ← Build output (git-ignored)
 │
-├── ai-agent/                          ← Python AI Agent (Phase 7 — COMPLETE)
-│   ├── main.py                        ← CLI entry point (generate/drift/report/validate/ci)
+├── ai-agent/                          ← Python AI Agent (Phase 7–9 — COMPLETE)
+│   ├── main.py                        ← CLI entry point (12 commands)
 │   ├── requirements.txt               ← Python dependencies (requests, pyyaml, flask)
 │   ├── README.md                      ← AI Agent documentation
-│   ├── dashboard.py                   ← Flask web dashboard for contract health
+│   ├── dashboard.py                   ← Flask web dashboard (live metrics, RCA, port 5050)
 │   ├── agent/
 │   │   ├── __init__.py
-│   │   ├── spec_reader.py             ← Fetches & parses OpenAPI specs
-│   │   ├── contract_generator.py      ← Generates SCC YAML contracts
-│   │   ├── drift_detector.py          ← Detects contract drift
-│   │   ├── report_generator.py        ← Generates reports & remediation
-│   │   ├── ci_config_generator.py     ← Generates GitLab CI pipeline
-│   │   ├── notifier.py                ← Team notifications (Slack + GitLab Issue Notes)
-│   │   └── mr_creator.py              ← Auto-creates GitLab MRs for contract fixes
+│   │   ├── spec_reader.py             ← Tool 1: Fetches & parses OpenAPI specs
+│   │   ├── contract_generator.py      ← Tool 2: Generates SCC YAML contracts (happy path)
+│   │   ├── negative_contract_generator.py ← Tool 3: Generates error scenario contracts (400/404)
+│   │   ├── drift_detector.py          ← Tool 4: Detects contract drift + coverage metrics
+│   │   ├── coverage_tracker.py        ← Tool 5: Historical coverage trends & snapshots
+│   │   ├── report_generator.py        ← Tool 6: Generates reports & remediation
+│   │   ├── root_cause_analyzer.py     ← Tool 7: AI RCA — WHAT/WHY/HOW for failures
+│   │   ├── backward_compatibility.py  ← Tool 8: Detects breaking API changes vs main
+│   │   ├── ci_config_generator.py     ← Tool 9: Generates GitLab CI pipeline
+│   │   ├── notifier.py                ← Tool 10: Teams/Slack/GitLab/SMTP notifications
+│   │   ├── mr_creator.py              ← Tool 11: Auto-creates GitLab MRs for fixes
+│   │   └── mr_validator.py            ← Tool 12: Posts validation summary on MRs
 │   ├── templates/                     ← HTML templates for Flask dashboard
+│   │   └── dashboard.html             ← Live dashboard with metrics cards & charts
 │   ├── reports/                       ← Saved reports (when using --save-report)
+│   ├── specs/                         ← Baseline OpenAPI spec snapshots
 │   └── tests/
 │       └── __init__.py
 │
-└── .gitlab-ci.yml                     ← CI/CD pipeline (AI-generated, 9 jobs, 5 stages)
+└── .gitlab-ci.yml                     ← CI/CD pipeline (AI-generated, 13 jobs, 5 stages)
 ```
 
 ---
@@ -242,11 +252,13 @@ contract-testing-automation/
 | **springdoc-openapi** | 2.5.0 | Auto-generates OpenAPI 3.0 specs from code |
 | **Jakarta Validation** | (managed) | Request body validation annotations |
 | **RestTemplate** | (managed) | HTTP client for inter-service communication |
-| **Python** | 3.14 | Language for the AI Agent |
+| **Python** | 3.14 | Language for the AI Agent (12 modules) |
 | **requests** | 2.32 | HTTP client (Python, for fetching OpenAPI spec) |
 | **PyYAML** | 6.0 | YAML parsing/generation (Python) |
 | **Flask** | 3.0 | Web dashboard for contract health visualization |
-| **GitLab CI** | — | CI/CD pipeline automation (9 jobs, 5 stages) |
+| **GitLab CI** | — | CI/CD pipeline automation (13 jobs, 5 stages) |
+| **Microsoft Teams** | — | Primary notification channel (Incoming Webhooks via Workflows) |
+| **Slack** | — | Secondary notification channel (Incoming Webhooks) |
 | **OpenAPI/Swagger** | 3.0 | API specification standard |
 
 ---
@@ -1166,15 +1178,18 @@ This is important because it means **contract tests can run in any order** and a
 
 | Metric | Value |
 |--------|-------|
-| Contracts generated by AI Agent | **2** (PUT update, DELETE) |
-| Total contracts (manual + AI) | **5** covering all 5 API endpoints |
-| API coverage | **100%** — every endpoint has a contract |
+| Contracts generated by AI Agent | **9** (5 positive + 7 negative scenario) |
+| Total contracts (manual + AI) | **12** covering all 5 API endpoints |
+| API coverage | **100%** — every endpoint has positive + negative contracts |
 | Health status | **HEALTHY** — no drift, no orphans |
-| Provider tests | **6/6 pass** (5 contract + 1 smoke) |
+| Provider tests | **15/15 pass** (12 contract + 2 negative + 1 smoke) |
 | Consumer tests | **2/2 pass** (1 contract + 1 smoke) |
-| CI pipeline generated | **9 jobs** across **5 stages** |
-| Notification channels | **2** (Slack + GitLab Issue Notes) |
+| CI pipeline generated | **13 jobs** across **5 stages** |
+| Notification channels | **4** (Teams + Slack + GitLab Issue Notes + SMTP) |
 | Auto-fix capability | **Yes** — MR creation with regenerated contracts |
+| Dashboard | **Flask web UI** on port 5050 with live metrics |
+| Root Cause Analysis | **Automatic** — WHAT/WHY/HOW for every failure |
+| Backward Compatibility | **MR gate** — blocks breaking API changes |
 
 ---
 
@@ -1186,9 +1201,9 @@ The `.gitlab-ci.yml` file (generated by the AI Agent's `ci` command) automates t
 
 | Stage | Jobs | Purpose |
 |-------|------|---------|
-| **build** | `provider-build`, `consumer-build` | Compile & package both APIs |
-| **test** | `provider-contract-test`, `consumer-contract-test`, `ai-agent-drift-check` | Run SCC verification, Consumer stub tests, drift detection |
-| **report** | `contract-report`, `notify-team` | Collect test results, send team notifications |
+| **build** | `provider-build`, `consumer-build`, `generate-contracts` | Compile & package both APIs, AI-generate contracts from OpenAPI spec |
+| **test** | `ai-agent-drift-check`, `backward-compat-check`, `provider-contract-test`, `consumer-contract-test` | Drift detection, backward compatibility gate (MR only), SCC verification, Consumer stub tests |
+| **report** | `contract-report`, `notify-team`, `root-cause-analysis`, `mr-validation-comment` | Collect results, send Teams/Slack notifications, AI RCA on failures, post MR summary comment |
 | **fix** | `auto-fix-contracts` | Manual trigger — regenerates drifted contracts and creates MR |
 | **deploy** | `deploy` | Gated by test success, auto-deploys from `main` branch only |
 
@@ -1196,7 +1211,10 @@ The `.gitlab-ci.yml` file (generated by the AI Agent's `ci` command) automates t
 - Maven dependency caching between pipeline runs
 - Provider stubs JAR passed as artifact to Consumer test job
 - JUnit test reports integrated with GitLab merge request UI
-- **Team notifications** — Slack webhooks + GitLab Issue Notes (auto-emails subscribers)
+- **Multi-channel notifications** — Teams (primary) + Slack + GitLab Issue Notes + SMTP
+- **Backward compatibility gate** — blocks MRs with breaking API changes
+- **Root cause analysis** — AI-powered failure explanation (runs on test failure)
+- **MR validation comment** — formatted summary table posted on every MR
 - **Auto-fix job** — one-click contract regeneration with automatic MR creation
 - Deployment blocked if any contract test fails
 - Docker image: `maven:3.9-eclipse-temurin-22` (Java 22 for SCC plugin)
@@ -1204,18 +1222,20 @@ The `.gitlab-ci.yml` file (generated by the AI Agent's `ci` command) automates t
 ### Pipeline Diagram
 
 ```
- STAGE 1: BUILD        STAGE 2: TEST                STAGE 3: REPORT      STAGE 4: FIX        STAGE 5: DEPLOY
-┌──────────────┐   ┌──────────────────────┐   ┌─────────────────┐   ┌──────────────┐   ┌──────────────┐
-│provider-build│   │provider-contract-test │   │ contract-report │   │ auto-fix-    │   │              │
-│  mvn compile │──▶│  mvn install (SCC)   │──▶│  JUnit XMLs     │   │ contracts    │   │   deploy     │
-└──────────────┘   │  → stubs JAR ────────┼──▶│  Summary        │   │ (manual)     │   │  GATED by    │
-┌──────────────┐   │                      │   └─────────────────┘   │  → MR        │   │  test success│
-│consumer-build│   │consumer-contract-test │   ┌─────────────────┐   └──────────────┘   │  main only   │
-│  mvn compile │──▶│  mvn test (stubs)    │   │ notify-team     │                       └──────────────┘
-└──────────────┘   │                      │   │  Slack + Email  │
-                   │ai-agent-drift-check  │──▶│  via Issue Notes│
-                   │  python validate     │   └─────────────────┘
-                   └──────────────────────┘
+ STAGE 1: BUILD              STAGE 2: TEST                    STAGE 3: REPORT           STAGE 4: FIX     STAGE 5: DEPLOY
+┌──────────────────┐  ┌──────────────────────────┐  ┌─────────────────────┐  ┌────────────┐  ┌──────────────┐
+│ provider-build     │  │ ai-agent-drift-check       │  │ contract-report       │  │ auto-fix-  │  │              │
+│  mvn compile       │  │  python drift detection     │  │  JUnit XMLs + Summary │  │ contracts  │  │   deploy     │
+├──────────────────┤  ├──────────────────────────┤  ├─────────────────────┤  │ (manual)   │  │  GATED by   │
+│ consumer-build     │  │ backward-compat-check (MR) │  │ notify-team           │  │ → MR       │  │  test pass  │
+│  mvn compile       │  ├──────────────────────────┤  │  Teams/Slack/Email   │  └────────────┘  │  main only  │
+├──────────────────┤  │ provider-contract-test      │  ├─────────────────────┤                 └──────────────┘
+│ generate-contracts │  │  mvn install (SCC)          │  │ root-cause-analysis   │
+│  AI reads spec     │  │  → 12 contracts verified    │  │  AI: WHAT/WHY/HOW     │
+│  → YAML contracts  │  ├──────────────────────────┤  ├─────────────────────┤
+└──────────────────┘  │ consumer-contract-test      │  │ mr-validation-comment │
+                       │  mvn test (WireMock stubs)  │  │  Posts summary on MR  │
+                       └──────────────────────────┘  └─────────────────────┘
 ```
 
 ---
@@ -1230,32 +1250,49 @@ Reporting and team notification capabilities are fully built:
 - ✅ Contract health reports with coverage % and status (via `python main.py report`)
 - ✅ Drift detection with specific remediation suggestions
 - ✅ Validation with CI-friendly exit codes (via `python main.py validate`)
-- ✅ **Team notifications** — Slack webhooks + GitLab Issue Notes (subscribers get auto-emailed)
+- ✅ **Multi-channel notifications** — Microsoft Teams (primary) + Slack + GitLab Issue Notes + SMTP email
+- ✅ **AI Root Cause Analysis** — parses failures and explains WHAT/WHY/HOW to fix
+- ✅ **Backward compatibility checker** — detects breaking API changes on MRs
+- ✅ **MR validation comment** — formatted summary table posted on every merge request
 - ✅ **Auto-fix with MR creation** — regenerates contracts and opens a GitLab Merge Request
-- ✅ **Flask web dashboard** — visual contract health at a glance (`python dashboard.py`)
+- ✅ **Flask web dashboard** — live metrics, coverage charts, RCA display (port 5050)
+- ✅ **Coverage trend tracking** — historical snapshots for trend analysis
+- ✅ **Negative contract generation** — auto-generates error scenario contracts (400/404)
 
 ### Notification Flow
 
 ```
 Contract Test Fails / Drift Detected
         │
-        ├─► Slack Webhook (if SLACK_WEBHOOK_URL is set)
-        │     → Posts formatted message to team channel
+        ├─► Microsoft Teams Webhook (PRIMARY — works from any CI runner)
+        │     → Adaptive Card with metrics, coverage, drift details
+        │     → Includes pipeline link, RCA suggestions, affected endpoints
         │
-        └─► GitLab Issue Notes (if GITLAB_TOKEN is set)
-              → Creates/updates "Contract Testing Notifications" issue
-              → GitLab auto-emails ALL issue subscribers
-              → No SMTP setup required — leverages GitLab's email infra
+        ├─► GitLab Issue Notes (if GITLAB_TOKEN is set)
+        │     → Creates/updates "Contract Testing Notifications" issue
+        │     → GitLab auto-emails ALL issue subscribers
+        │
+        ├─► Slack Webhook (if SLACK_WEBHOOK_URL is set)
+        │     → Formatted block kit message to team channel
+        │
+        ├─► Direct SMTP (if SMTP_HOST is set — corp network only)
+        │     → HTML email to NOTIFY_EMAILS recipients
+        │
+        └─► Local File (last resort — always saved)
+              → Report saved to ai-agent/reports/
 ```
 
 ### CI/CD Variables Required (set in GitLab → Settings → CI/CD → Variables)
 
 | Variable | Purpose | Required? |
 |----------|---------|-----------|
-| `GITLAB_TOKEN` | Personal Access Token (api scope) — for MR creation & Issue Notes | Yes |
+| `TEAMS_WEBHOOK_URL` | Microsoft Teams Incoming Webhook URL (from Workflows) | Recommended (primary) |
+| `GITLAB_TOKEN` | Personal Access Token (api scope) — for MR creation, Issue Notes, MR comments | Yes |
 | `SLACK_WEBHOOK_URL` | Slack incoming webhook URL | Optional |
-| `SMTP_HOST` | Direct email relay (fallback if GitLab Notes unavailable) | Optional |
+| `SMTP_HOST` | Direct email relay host (fallback, corp network only) | Optional |
+| `SMTP_PORT` | SMTP port (default: 25,587) | Optional |
 | `NOTIFY_EMAILS` | Comma-separated recipients for direct SMTP | Optional |
+| `GITLAB_MENTION_USERS` | Comma-separated GitLab usernames to @mention in notifications | Optional |
 
 ---
 
