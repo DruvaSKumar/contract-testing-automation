@@ -444,6 +444,13 @@ notify-team:
     - python3 main.py --notify --save-report --pipeline-url "$CI_PIPELINE_URL" report
     # Generate static dashboard snapshot (browsable artifact)
     - python3 dashboard.py --export
+    # Generate HTML report from full_report.txt for browsable artifact
+    - |
+      if [ -f reports/full_report.txt ]; then
+        echo "<html><head><title>Contract Report</title><style>body{font-family:monospace;padding:20px;background:#1a1a2e;color:#e0e0e0;}pre{white-space:pre-wrap;}</style></head><body><pre>" > reports/report.html
+        cat reports/full_report.txt >> reports/report.html
+        echo "</pre></body></html>" >> reports/report.html
+      fi
     # Cleanup
     - kill $PROVIDER_PID 2>/dev/null || true
   artifacts:
@@ -599,6 +606,13 @@ auto-fix-contracts:
     - python3 main.py --notify --save-report --pipeline-url "$CI_PIPELINE_URL" report
     # Export fresh dashboard reflecting the fixed state
     - python3 dashboard.py --export
+    # Generate HTML report from full_report.txt
+    - |
+      if [ -f reports/full_report.txt ]; then
+        echo "<html><head><title>Contract Report</title><style>body{font-family:monospace;padding:20px;background:#1a1a2e;color:#e0e0e0;}pre{white-space:pre-wrap;}</style></head><body><pre>" > reports/report.html
+        cat reports/full_report.txt >> reports/report.html
+        echo "</pre></body></html>" >> reports/report.html
+      fi
     # Cleanup
     - kill $PROVIDER_PID 2>/dev/null || true
   artifacts:
