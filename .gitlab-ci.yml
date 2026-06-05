@@ -65,6 +65,10 @@ provider-build:
     - cd provider-api
     - mvn $MAVEN_CLI_OPTS clean compile
   rules:
+    # Always run on main branch (merges must run full pipeline)
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    # On other branches, only run when provider files change
     - changes:
         - provider-api/**/*
         - .gitlab-ci.yml
@@ -84,6 +88,10 @@ consumer-build:
     - cd consumer-api
     - mvn $MAVEN_CLI_OPTS clean compile
   rules:
+    # Always run on main branch (merges must run full pipeline)
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: always
+    # On other branches, only run when consumer files change
     - changes:
         - consumer-api/**/*
         - .gitlab-ci.yml
@@ -583,10 +591,14 @@ auto-fix-contracts:
         echo "Waiting for Provider... ($i/30)"
         sleep 2
       done
-    # Run auto-fix with MR creation (no notification — notify-team handles it)
+    # Run auto-fix with MR creation
     - cd $CI_PROJECT_DIR/ai-agent
     - . .venv/bin/activate
     - python3 main.py --save-report fix --create-mr
+    # After fixing, run fresh drift check and send updated notification
+    - python3 main.py --notify --save-report --pipeline-url "$CI_PIPELINE_URL" report
+    # Export fresh dashboard reflecting the fixed state
+    - python3 dashboard.py --export
     # Cleanup
     - kill $PROVIDER_PID 2>/dev/null || true
   artifacts:
@@ -645,6 +657,9 @@ pages:
       optional: true
       artifacts: true
     - job: notify-team
+      optional: true
+      artifacts: true
+    - job: auto-fix-contracts
       optional: true
       artifacts: true
   script:
