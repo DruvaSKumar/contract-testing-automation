@@ -197,6 +197,8 @@ ai-agent-drift-check:
     - job: consumer-contract-test
       optional: true
       artifacts: true
+  rules:
+    - when: always
   before_script:
     # Install Python for the AI agent
     - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv > /dev/null 2>&1
@@ -308,6 +310,8 @@ provider-contract-test:
     - job: generate-contracts
       optional: true
       artifacts: true
+  rules:
+    - when: always
   script:
     - cd provider-api
     - mvn $MAVEN_CLI_OPTS clean install
@@ -347,6 +351,8 @@ consumer-contract-test:
       artifacts: true
     - job: consumer-build
       optional: true
+  rules:
+    - when: always
   script:
     # Build Provider and install stubs JAR to local Maven repo
     # Tests are skipped because they already passed in provider-contract-test
@@ -581,26 +587,20 @@ mr-validation-comment:
 # When drift is detected, this job:
 #   1. Starts the Provider API for live spec access
 #   2. Runs the AI Agent's fix command (fixes contracts locally)
-#   3. Commits the fixes and triggers a NEW pipeline
-#      (build → test → drift-check → report → deploy)
-#   4. The new pipeline verifies the fix is clean before deploy
+#   3. Commits and pushes the fix DIRECTLY to the current branch
+#   4. The push automatically triggers a NEW pipeline on this branch
+#      which will: build → test → drift-check → report → deploy
 #
 # Prerequisites (CI/CD Variables in GitLab):
-#   GITLAB_TOKEN      — Personal Access Token (api scope)
+#   GITLAB_TOKEN      — Personal Access Token (api + write_repository scope)
 #   CI_PROJECT_ID    — Built-in GitLab CI variable (auto-set)
 # ============================================================
 auto-fix-contracts:
   stage: fix
   image: maven:3.9-eclipse-temurin-22
-  needs:
-    - job: ai-agent-drift-check
-      artifacts: true
-      optional: true
-    - job: notify-team
-      optional: true
-      artifacts: true
+  needs: []
   before_script:
-    - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv curl > /dev/null 2>&1
+    - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv curl git > /dev/null 2>&1
     - cd ai-agent
     - python3 -m venv .venv
     - . .venv/bin/activate
@@ -620,10 +620,10 @@ auto-fix-contracts:
         echo "Waiting for Provider... ($i/30)"
         sleep 2
       done
-    # Run auto-fix — commits fixed contracts and pushes to branch
+    # Run auto-fix (WITHOUT --create-mr — we push directly to current branch)
     - cd $CI_PROJECT_DIR/ai-agent
     - . .venv/bin/activate
-    - python3 main.py --save-report fix --create-mr
+    - python3 main.py --save-report fix
     # After fixing, run fresh drift check and send updated notification
     - python3 main.py --notify --save-report --pipeline-url "$CI_PIPELINE_URL" report
     # Export fresh dashboard reflecting the fixed state
@@ -637,16 +637,26 @@ auto-fix-contracts:
       fi
     # Cleanup
     - kill $PROVIDER_PID 2>/dev/null || true
-    # Trigger a new pipeline to verify the fix (build → test → deploy)
+    # Commit and push fixed contracts directly to current branch
+    # This push triggers a new pipeline automatically
+    - cd $CI_PROJECT_DIR
+    - git config user.email "ai-agent@contract-testing.bot"
+    - git config user.name "Contract Testing AI Agent"
+    - git add provider-api/src/test/resources/contracts/
     - |
-      echo "Triggering new pipeline to verify fix..."
-      curl --fail --request POST \
-        --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-        "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/pipeline" \
-        --form "ref=$CI_COMMIT_BRANCH" \
-        --form "variables[SKIP_GENERATE_CONTRACTS]=true" \
-        && echo "New pipeline triggered successfully!" \
-        || echo "Warning: Could not trigger new pipeline. Merge the fix MR to re-run."
+      if git diff --cached --quiet; then
+        echo "No changes to commit — contracts already in sync."
+      else
+        git commit -m "fix(BTIQ-0000): auto-fix drifted contracts [skip ci-fix]"
+        git remote set-url origin "https://oauth2:${GITLAB_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+        git push origin HEAD:${CI_COMMIT_BRANCH}
+        echo ""
+        echo "========================================================"
+        echo "  Fixed contracts pushed to ${CI_COMMIT_BRANCH}!"
+        echo "  A new pipeline will start automatically."
+        echo "  (build → test → drift-check → report → deploy)"
+        echo "========================================================"
+      fi
   artifacts:
     when: always
     paths:
