@@ -197,6 +197,8 @@ ai-agent-drift-check:
     - job: consumer-contract-test
       optional: true
       artifacts: true
+  rules:
+    - when: always
   before_script:
     # Install Python for the AI agent
     - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv > /dev/null 2>&1
@@ -308,6 +310,8 @@ provider-contract-test:
     - job: generate-contracts
       optional: true
       artifacts: true
+  rules:
+    - when: always
   script:
     - cd provider-api
     - mvn $MAVEN_CLI_OPTS clean install
@@ -347,6 +351,8 @@ consumer-contract-test:
       artifacts: true
     - job: consumer-build
       optional: true
+  rules:
+    - when: always
   script:
     # Build Provider and install stubs JAR to local Maven repo
     # Tests are skipped because they already passed in provider-contract-test
@@ -592,13 +598,7 @@ mr-validation-comment:
 auto-fix-contracts:
   stage: fix
   image: maven:3.9-eclipse-temurin-22
-  needs:
-    - job: ai-agent-drift-check
-      artifacts: true
-      optional: true
-    - job: notify-team
-      optional: true
-      artifacts: true
+  needs: []
   before_script:
     - apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv curl > /dev/null 2>&1
     - cd ai-agent
