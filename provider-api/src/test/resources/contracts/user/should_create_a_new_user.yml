@@ -20,7 +20,7 @@ request:
   headers:
     Content-Type: application/json
   body:
-    fullname: Sample User
+    name: Sample User
     email: sample@example.com
     role: USER
 response:
@@ -29,7 +29,7 @@ response:
     Content-Type: application/json
   body:
     id: 1
-    fullname: Sample User
+    name: Sample User
     email: sample@example.com
     role: USER
   matchers:
@@ -37,7 +37,7 @@ response:
     - path: $.id
       type: by_regex
       value: '[0-9]+'
-    - path: $.fullname
+    - path: $.name
       type: by_regex
       value: .+
     - path: $.email
