@@ -23,7 +23,7 @@ response:
     Content-Type: application/json
   body:
     id: 1
-    name: Sample User
+    fullName: Sample User
     email: sample@example.com
     role: USER
   matchers:
@@ -31,7 +31,7 @@ response:
     - path: $.id
       type: by_regex
       value: '[0-9]+'
-    - path: $.name
+    - path: $.fullName
       type: by_regex
       value: .+
     - path: $.email
